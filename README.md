@@ -3,6 +3,8 @@
 Annotating facsimile page images with rectangular zones for TEI/MEI export. Documents are saved as a single
 `.fca` file containing msgpack-encoded nested document, surface, and zone data.
 
+<img src="readme/gui.png" width="400">
+
 ## Install Dependencies
 
 ```bash
