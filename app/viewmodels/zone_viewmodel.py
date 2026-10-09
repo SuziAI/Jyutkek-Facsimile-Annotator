@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import QObject, Signal
 
+from app.viewmodels.content_viewmodel import BodyMetadataViewModel, BodyRecitativoViewModel, BodyQupaiViewModel
+
 
 class ZoneViewModel(QObject):
     """
@@ -9,8 +11,10 @@ class ZoneViewModel(QObject):
 
     Signals:
         rect_changed (Signal(float, float, float, float)): Emitted when the zone rectangle coordinates are changed.
+        content_changed (Signal()): Emitted when the zone content is changed.
     """
     rect_changed = Signal(float, float, float, float)
+    content_changed = Signal()
 
     def __init__(
         self,
@@ -18,6 +22,7 @@ class ZoneViewModel(QObject):
         uly: int = 0,
         lrx: int = 0,
         lry: int = 0,
+        content: BodyMetadataViewModel | BodyRecitativoViewModel | BodyQupaiViewModel | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -25,6 +30,7 @@ class ZoneViewModel(QObject):
         self._uly = int(uly)
         self._lrx = int(lrx)
         self._lry = int(lry)
+        self._content = content
 
     @property
     def ulx(self) -> int:
@@ -69,3 +75,12 @@ class ZoneViewModel(QObject):
         self._lrx = lrx
         self._lry = lry
         self.rect_changed.emit(self._ulx, self._uly, self._lrx, self._lry)
+
+    @property
+    def content(self) -> BodyMetadataViewModel | BodyRecitativoViewModel | BodyQupaiViewModel | None:
+        return self._content
+
+    @content.setter
+    def content(self, value: BodyMetadataViewModel | BodyRecitativoViewModel | BodyQupaiViewModel | None) -> None:
+        self._content = value
+        self.content_changed.emit()

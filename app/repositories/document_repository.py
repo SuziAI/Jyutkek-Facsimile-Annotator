@@ -65,6 +65,7 @@ class DocumentRepository:
                 uly=int(zone["uly"]),
                 lrx=int(zone["lrx"]),
                 lry=int(zone["lry"]),
+                content=zone["content"] if "content" in zone else None
             )
             for zone in data["zones"]
         )
@@ -85,4 +86,5 @@ class DocumentRepository:
         """
         if value not in ("TEI", "MEI"):
             raise ValueError(f"Unsupported document type: {value!r}")
+        value = "MEI"  # always return MEI for Jyutkek
         return value

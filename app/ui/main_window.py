@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QToolBar,
     QVBoxLayout,
-    QWidget, QLineEdit, QDockWidget,
+    QWidget, QLineEdit, QDockWidget, QTabWidget,
 )
 
 from app.constants import APPLICATION_NAME, DOCUMENT_FILE_EXTENSION
@@ -92,7 +92,7 @@ class MainWindow(QMainWindow):
         self._zone_table.itemSelectionChanged.connect(self._zone_table_selection_changed)
 
         self._document_type_combo = QComboBox(self)
-        self._document_type_combo.addItems(["TEI", "MEI"])
+        self._document_type_combo.addItems(["MEI"])
         self._document_type_combo.currentTextChanged.connect(self._document_type_changed)
 
         self._page_label = FocusableLineEdit("0 / 0", self)
@@ -241,11 +241,15 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(root)
         main_layout.addWidget(self._canvas, stretch=1)
 
-        side_panel = QWidget(self)
-        side_layout = QVBoxLayout(side_panel)
-        side_layout.addWidget(self._image_label)
-        side_layout.addWidget(QLabel("Zones", self))
-        side_layout.addWidget(self._zone_table)
+        tab_widget = QTabWidget(self)
+
+        # ZONES TAB
+        # ------------------------------------------------
+        zones_tab = QWidget(self)
+        zones_layout = QVBoxLayout(zones_tab)
+        zones_layout.addWidget(self._image_label)
+        zones_layout.addWidget(QLabel("Zones", self))
+        zones_layout.addWidget(self._zone_table)
 
         coordinate_layout = QVBoxLayout()
         for label, spinbox in (
@@ -258,19 +262,27 @@ class MainWindow(QMainWindow):
             row.addWidget(QLabel(label, self))
             row.addWidget(spinbox)
             coordinate_layout.addLayout(row)
-        side_layout.addLayout(coordinate_layout)
+        zones_layout.addLayout(coordinate_layout)
 
         button_layout = QHBoxLayout()
         button_layout.addWidget(self._delete_zone_button)
         button_layout.addWidget(self._move_zone_up_button)
         button_layout.addWidget(self._move_zone_down_button)
+        zones_layout.addLayout(button_layout)
 
-        side_layout.addLayout(button_layout)
-        side_panel.setMinimumWidth(340)
+        zones_tab.setMinimumWidth(340)
+        zones_tab.setLayout(zones_layout)
+        tab_widget.addTab(zones_tab, "Zones")
+
+        # CONTENT TAB
+        # ------------------------------------------------
+
+        # Dock
+        # ------------------------------------------------
 
         dock = QDockWidget("Page Zones", self)
         dock.setObjectName("dock")
-        dock.setWidget(side_panel)
+        dock.setWidget(tab_widget)
         dock.setFeatures(
             QDockWidget.DockWidgetFeature.DockWidgetMovable |
             QDockWidget.DockWidgetFeature.DockWidgetFloatable
@@ -424,7 +436,7 @@ class MainWindow(QMainWindow):
             self,
             "Save Document",
             default_filename,
-            f"TEI/MEI XML (*.xml);;All Files (*)",
+            f"MEI XML (*.xml);;All Files (*)",
         )
         if not filename:
             return
@@ -485,7 +497,7 @@ class MainWindow(QMainWindow):
         )
 
     def _document_type_changed(self, value: str) -> None:
-        if value in ("TEI", "MEI"):
+        if value in ("MEI"):
             self._document_service.set_document_type(value)
 
     def _sync_document_type_combo(self, *_args) -> None:
