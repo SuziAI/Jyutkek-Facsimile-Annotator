@@ -5,13 +5,15 @@ from typing import Callable, Generic, Literal, TypeVar
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
-from app.models.document import Document, Surface, Zone
+from app.models.document import Document, Zone
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.text_repository import TextRepository
 from app.services.command_service import Command, AddZoneCommand, RemoveZoneCommand, UpdateZoneRectCommand, \
-    SetDocumentTypeCommand, GoToPageCommand, AddSurfacesCommand, RemoveSurfaceCommand, ChangeZoneOrderCommand
+    SetDocumentTypeCommand, GoToPageCommand, AddSurfacesCommand, RemoveSurfaceCommand, ChangeZoneOrderCommand, \
+    AddBlockCommand, RemoveBlockCommand
 from app.services.mapping_service import document_to_viewmodel, viewmodel_to_document
 from app.services.xml_export_service import viewmodel_to_xml
+from app.viewmodels.content_block_viewmodel import ContentBlockViewModel
 from app.viewmodels.document_viewmodel import DocumentViewModel
 from app.viewmodels.zone_viewmodel import ZoneViewModel
 
@@ -322,6 +324,24 @@ class DocumentService(QObject):
         :param doc_type: Document type.
         """
         cmd = SetDocumentTypeCommand(self._document_vm, doc_type)
+        self.do_command(cmd)
+
+    def add_block(self, surface_index: int, zone_index: int, block: ContentBlockViewModel) -> None:
+        cmd = AddBlockCommand(
+            document_vm=self._document_vm,
+            surface_index=surface_index,
+            zone_index=zone_index,
+            block=block,
+        )
+        self.do_command(cmd)
+
+    def remove_block(self, surface_index: int, zone_index: int, block_index: int) -> None:
+        cmd = RemoveBlockCommand(
+            document_vm=self._document_vm,
+            surface_index=surface_index,
+            zone_index=zone_index,
+            block_index=block_index,
+        )
         self.do_command(cmd)
 
     def _emit_undo_redo_changed(self):

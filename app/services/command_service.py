@@ -6,6 +6,7 @@ from PySide6.QtCore import Signal
 
 from app.models.document import Zone, Surface
 from app.services.mapping_service import zone_to_viewmodel, surface_to_viewmodel
+from app.viewmodels.content_block_viewmodel import ContentBlockViewModel
 from app.viewmodels.document_viewmodel import DocumentViewModel
 from app.viewmodels.surface_viewmodel import SurfaceViewModel
 from app.viewmodels.zone_viewmodel import ZoneViewModel
@@ -439,3 +440,91 @@ class ChangeZoneOrderCommand(Command):
             self.document_vm.selected_zone_index = self.zone_index
         else:
             self.document_vm.selected_zone_index = None
+
+
+class AddBlockCommand(Command):
+    """
+    Adds a zone content block.
+    """
+    def __init__(self, document_vm: DocumentViewModel, surface_index: int,
+                 zone_index: int, block: ContentBlockViewModel):
+        """
+        :param document_vm: Document viewmodel.
+        :param surface_index: Surface index.
+        :param zone_index: Zone index.
+        :param block: Block to add.
+        """
+        self._document_vm = document_vm
+        self._surface_index = surface_index
+        self._zone_index = zone_index
+        self._block = block
+        self._old_content: tuple[ContentBlockViewModel, ...] | None = None
+
+    def name(self):
+        return "Add Zone Content Block"
+
+    def do(self) -> None:
+        surface = self._document_vm.surfaces[self._surface_index]
+        zone = surface.zones[self._zone_index]
+        body = zone.content
+
+        self._old_content = body.content
+        new_content = list(body.content)
+        new_content.append(self._block)
+        body.content = tuple(new_content)
+
+        self._document_vm.dirty = True
+
+    def undo(self) -> None:
+        surface = self._document_vm.surfaces[self._surface_index]
+        zone = surface.zones[self._zone_index]
+        body = zone.content
+
+        if self._old_content is not None:
+            body.content = self._old_content
+
+        self._document_vm.dirty = True
+
+
+class RemoveBlockCommand(Command):
+    """
+    Removes a zone content block.
+    """
+
+    def __init__(self, document_vm: DocumentViewModel, surface_index: int,
+                 zone_index: int, block_index: int):
+        """
+        :param document_vm: Document viewmodel.
+        :param surface_index: Surface index.
+        :param zone_index: Zone index.
+        :param block_index: Block index to remove.
+        """
+        self.document_vm = document_vm
+        self.surface_index = surface_index
+        self.zone_index = zone_index
+        self.block_index = block_index
+
+        self.deleted_block = None
+
+        if not 0 <= block_index < len(self.document_vm.surfaces[surface_index].zones[zone_index].content.content):
+            raise IndexError(f"Zone content block index out of range: {block_index}")
+
+    def name(self):
+        return "Remove Zone Content Block"
+
+    def do(self):
+        blocks = self.document_vm.surfaces[self.surface_index].zones[self.zone_index].content
+        self.deleted_block = blocks.content[self.block_index]  # Save for undo
+
+        blocks.content = (
+            *blocks.content[:self.block_index],
+            *blocks.content[self.block_index + 1:],
+        )
+        self.document_vm.dirty = True
+
+    def undo(self):
+        blocks = self.document_vm.surfaces[self.surface_index].zones[self.zone_index].content
+        blocks_list = list(blocks.content)
+        blocks_list.insert(self.block_index, self.deleted_block)
+        blocks.content = tuple(blocks_list)
+        self.document_vm.dirty = True

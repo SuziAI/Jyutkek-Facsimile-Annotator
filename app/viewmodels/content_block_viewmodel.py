@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Union
 
 from PySide6.QtCore import QObject, Signal
 
@@ -221,3 +222,13 @@ class CellBlockViewModel(QObject):
     def prolongation_dot(self, value: ProlongationDotCellViewModel | None) -> None:
         self._prolongation_dot = value
         self.cell_changed.emit()
+
+
+ContentBlockViewModel = Union[
+    TitleBlockViewModel,
+    ParagraphBlockViewModel,
+    RoleAnnotBlockViewModel,
+    DirectionBlockViewModel,
+    LineBlockViewModel,
+    CellBlockViewModel,
+]

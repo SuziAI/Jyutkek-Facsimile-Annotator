@@ -280,7 +280,7 @@ class MainWindow(QMainWindow):
         content_tab = QWidget(self)
         content_layout = QVBoxLayout(content_tab)
 
-        self._content_editor = ZoneContentEditor(self)
+        self._content_editor = ZoneContentEditor(self._document_vm, self._document_service, parent=self)
         content_layout.addWidget(self._content_editor)
 
         content_tab.setLayout(content_layout)

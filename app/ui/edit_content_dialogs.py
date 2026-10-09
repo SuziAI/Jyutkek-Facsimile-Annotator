@@ -14,12 +14,14 @@ from PySide6.QtWidgets import (
 from typing import get_args
 
 from app.models.document import Beat, Pitch
+from app.services.document_service import DocumentService
 from app.ui.widgets import VerticalTextWidget
 from app.viewmodels.content_block_viewmodel import CellBlockViewModel, TitleBlockViewModel, ParagraphBlockViewModel, \
     RoleAnnotBlockViewModel, DirectionBlockViewModel, LineBlockViewModel
 from app.viewmodels.content_cell_viewmodel import BeatCellViewModel, SylCellViewModel, ProlongationDotCellViewModel, \
     GongcheCellViewModel
 from app.viewmodels.content_viewmodel import BodyMetadataViewModel, BodyQupaiViewModel, BodyRecitativoViewModel
+from app.viewmodels.document_viewmodel import DocumentViewModel
 from app.viewmodels.zone_viewmodel import ZoneViewModel
 
 BEAT_CHOICES: tuple[str, ...] = get_args(Beat)
@@ -246,9 +248,16 @@ class ZoneContentEditor(QWidget):
     and the corresponding block viewmodels.
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self,
+                 document_vm: DocumentViewModel,
+                 document_service: DocumentService,
+                 parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._document_vm = document_vm
+        self._document_service = document_service
         self._zone: ZoneViewModel | None = None
+
+        self._document_service.undo_redo_changed.connect(self._populate_block_list)
 
         main_layout = QVBoxLayout(self)
 
@@ -508,8 +517,11 @@ class ZoneContentEditor(QWidget):
         """
         Enables or disables the editor widgets based on selection and type.
         """
-        enabled = self._zone is not None and self._zone.content is not None
+        enabled = self._zone is not None
         self._type_combo.setEnabled(enabled)
+
+        # allow adding and removing blocks only with actual content types
+        enabled = enabled and self._zone.content is not None
         self._block_list.setEnabled(enabled)
         self._add_block_btn.setEnabled(enabled)
         self._remove_block_btn.setEnabled(enabled)
@@ -525,10 +537,16 @@ class ZoneContentEditor(QWidget):
         Adds a block of a type suitable for the current body.
         Now uses DialogSelectBlockType so the user can choose the block type.
         """
+        surface_index = self._document_vm.current_page_index
+        zone_index = self._document_vm.selected_zone_index
+        if zone_index is None:
+            return
+
         body = self._current_body()
         if body is None:
             return
 
+        # 1) Determine allowed choices based on body type
         if isinstance(body, BodyMetadataViewModel):
             choices = ["Title", "Paragraph"]
         elif isinstance(body, BodyRecitativoViewModel):
@@ -538,16 +556,14 @@ class ZoneContentEditor(QWidget):
         else:
             return
 
+        # 2) Show dialog to pick the type
         dlg = DialogSelectBlockType(choices, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
-        selected = dlg.selected_type
-        if selected is None:
-            return
+        selected = dlg.selected_type  # or whatever attribute your dialog exposes
 
-        blocks = list(body.content)
-
+        # 3) Construct the new block based on `body` and the selected type
         if isinstance(body, BodyMetadataViewModel):
             if selected == "Title":
                 new_block = TitleBlockViewModel(title="", parent=body)
@@ -579,14 +595,20 @@ class ZoneContentEditor(QWidget):
         else:
             return
 
-        blocks.append(new_block)
-        self._set_body_content(tuple(blocks))
-        self._populate_block_list()
+        # 4) Delegate the *mutation* to DocumentService so it becomes undoable
+        self._document_service.add_block(
+            surface_index=surface_index,
+            zone_index=zone_index,
+            block=new_block,
+        )
 
     def _remove_block(self) -> None:
         """
         Removes the currently selected block from the body content.
         """
+        surface_index = self._document_vm.current_page_index
+        zone_index = self._document_vm.selected_zone_index
+
         body = self._current_body()
         if body is None:
             return
@@ -595,11 +617,11 @@ class ZoneContentEditor(QWidget):
         if row < 0:
             return
 
-        blocks = list(body.content)
-        if 0 <= row < len(blocks):
-            del blocks[row]
-        self._set_body_content(tuple(blocks))
-        self._populate_block_list()
+        self._document_service.remove_block(
+            surface_index=surface_index,
+            zone_index=zone_index,
+            block_index=row
+        )
 
     def _edit_block_clicked(self) -> None:
         """
