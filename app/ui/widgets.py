@@ -23,6 +23,9 @@ class VerticalTextWidget(QWidget):
         font = self.font()
         font.setBold(bold)
 
+        if text is None:
+            text = ""
+
         for ch in text:
             lbl = QLabel(ch, self)
             lbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
