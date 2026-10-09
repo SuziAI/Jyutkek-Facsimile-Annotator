@@ -29,6 +29,7 @@ from app.services.document_service import DocumentService
 from app.services.settings_service import SettingsService
 from app.services.xml_id_service import XmlIdService
 from app.ui.dialog_change_settings import DialogChangeSettings
+from app.ui.edit_content_dialogs import ZoneContentEditor
 from app.ui.facsimile_canvas import FacsimileCanvas
 from app.ui.widgets import FocusableLineEdit
 from app.viewmodels.document_viewmodel import DocumentViewModel
@@ -141,7 +142,7 @@ class MainWindow(QMainWindow):
                 event.accept()
                 return
         super().keyPressEvent(event)
-    
+
     @override
     def closeEvent(self, event: QEvent) -> None:
         """
@@ -276,6 +277,14 @@ class MainWindow(QMainWindow):
 
         # CONTENT TAB
         # ------------------------------------------------
+        content_tab = QWidget(self)
+        content_layout = QVBoxLayout(content_tab)
+
+        self._content_editor = ZoneContentEditor(self)
+        content_layout.addWidget(self._content_editor)
+
+        content_tab.setLayout(content_layout)
+        tab_widget.addTab(content_tab, "Content")
 
         # Dock
         # ------------------------------------------------
@@ -343,6 +352,7 @@ class MainWindow(QMainWindow):
             return
         for zone_vm in surface.zones:
             zone_vm.rect_changed.connect(self._zone_rect_changed)
+            zone_vm.content_changed.connect(self._zone_content_changed)
             self._zone_connections.append(zone_vm)
         self._rebuild_zone_table()
 
@@ -350,6 +360,10 @@ class MainWindow(QMainWindow):
         for zone_vm in self._zone_connections:
             try:
                 zone_vm.rect_changed.disconnect(self._zone_rect_changed)
+            except RuntimeError:
+                pass
+            try:
+                zone_vm.content_changed.disconnect(self._zone_content_changed)
             except RuntimeError:
                 pass
         self._zone_connections.clear()
@@ -576,6 +590,13 @@ class MainWindow(QMainWindow):
                     self._sync_coordinate_spinboxes()
                 return
 
+    def _zone_content_changed(self, *_args) -> None:
+        # Called when any zone's content changes; if it is the selected one,
+        # refresh the content editor.
+        zone_vm = self._selected_zone()
+        if zone_vm is not None:
+            self._content_editor.set_zone(zone_vm)
+
     def _zone_table_selection_changed(self) -> None:
         selected_rows = self._zone_table.selectionModel().selectedRows()
         if not selected_rows:
@@ -594,6 +615,9 @@ class MainWindow(QMainWindow):
         self._delete_zone_button.setEnabled(selected is not None)
         self._move_zone_up_button.setEnabled(selected is not None)
         self._move_zone_down_button.setEnabled(selected is not None)
+
+        # Update content editor with currently selected zone
+        self._content_editor.set_zone(self._selected_zone())
 
     def _coordinate_spinbox(self) -> QDoubleSpinBox:
         spinbox = QDoubleSpinBox(self)

@@ -8,6 +8,28 @@ from PySide6.QtWidgets import QLineEdit, QWidget, QLabel, QMenu, QToolTip, QColo
 from app.models.settings import int_range, float_range
 
 
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
+
+class VerticalTextWidget(QWidget):
+    """
+    VerticalTextWidget is a widget for displaying text vertically.
+    """
+    def __init__(self, text: str, bold: bool = False, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(0)
+
+        font = self.font()
+        font.setBold(bold)
+
+        for ch in text:
+            lbl = QLabel(ch, self)
+            lbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+            lbl.setFont(font)
+            layout.addWidget(lbl)
+
+
 class FocusableLineEdit(QLineEdit):
     """
     FocusableLineEdit endows a QLineEdit with a signal when the widget gains focus.

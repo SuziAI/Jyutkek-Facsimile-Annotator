@@ -457,10 +457,13 @@ def zone_to_viewmodel(zone: Zone, vm: ZoneViewModel) -> None:
         return
 
     if isinstance(zone.content, BodyMetadata):
+        vm.content = BodyMetadataViewModel(parent=vm)
         body_metadata_to_viewmodel(zone.content, vm.content)
     elif isinstance(zone.content, BodyRecitativo):
+        vm.content = BodyRecitativoViewModel(parent=vm)
         body_recitativo_to_viewmodel(zone.content, vm.content)
     elif isinstance(zone.content, BodyQupai):
+        vm.content = BodyQupaiViewModel(parent=vm)
         body_qupai_to_viewmodel(zone.content, vm.content)
     else:
         raise TypeError(f"Unsupported zone content type: {type(zone.content)!r}")
