@@ -15,6 +15,10 @@ from typing import get_args
 
 from app.models.document import Beat, Pitch
 from app.services.document_service import DocumentService
+from app.services.mapping_service import viewmodel_to_cell_block, cell_block_to_viewmodel, viewmodel_to_line_block, \
+    line_block_to_viewmodel, viewmodel_to_title_block, title_block_to_viewmodel, viewmodel_to_paragraph_block, \
+    paragraph_block_to_viewmodel, viewmodel_to_role_annot_block, role_annot_block_to_viewmodel, \
+    viewmodel_to_direction_block, direction_block_to_viewmodel
 from app.ui.widgets import VerticalTextWidget
 from app.viewmodels.content_block_viewmodel import CellBlockViewModel, TitleBlockViewModel, ParagraphBlockViewModel, \
     RoleAnnotBlockViewModel, DirectionBlockViewModel, LineBlockViewModel
@@ -396,7 +400,7 @@ class ZoneContentEditor(QWidget):
         if isinstance(block, RoleAnnotBlockViewModel):
             roles = " ".join(block.plist) if block.plist else ""
             attr = f"plist={roles}" if roles else ""
-            return "RoleAnnot", None, block.content, None, attr
+            return "Role", None, block.content, None, attr
 
         # Direction
         if isinstance(block, DirectionBlockViewModel):
@@ -427,7 +431,7 @@ class ZoneContentEditor(QWidget):
                 parts.append(f'con="{block.syl.con}"')
             attr = ", ".join(parts) if parts else ""
 
-            return "CellBlock", text_display, gongche_display, beat_display, attr
+            return "Cell", text_display, gongche_display, beat_display, attr
 
         # Fallback
         type_name = type(block).__name__
@@ -674,55 +678,50 @@ class ZoneContentEditor(QWidget):
 
         block = type_item.data(Qt.ItemDataRole.UserRole)
 
-        if isinstance(block, (TitleBlockViewModel, ParagraphBlockViewModel,
-                              RoleAnnotBlockViewModel, DirectionBlockViewModel,
-                              LineBlockViewModel)):
-            self._edit_text_block(block)
+        # since we want the editing operation to be undoable,
+        # do not directly mutate the block. Instead, make
+        # a model out of it and get a new viewmodel from it!
+
+        if isinstance(block, TitleBlockViewModel):
+            edited_block = TitleBlockViewModel(parent=block.parent())
+            title_block_to_viewmodel(viewmodel_to_title_block(block), edited_block)
+            editing_accepted = self._edit_text_block(block)
+        elif isinstance(block, ParagraphBlockViewModel):
+            edited_block = ParagraphBlockViewModel(parent=block.parent())
+            paragraph_block_to_viewmodel(viewmodel_to_paragraph_block(block), edited_block)
+            editing_accepted = self._edit_text_block(block)
+        elif isinstance(block, RoleAnnotBlockViewModel):
+            edited_block = RoleAnnotBlockViewModel(parent=block.parent())
+            role_annot_block_to_viewmodel(viewmodel_to_role_annot_block(block), edited_block)
+            editing_accepted = self._edit_text_block(block)
+        elif isinstance(block, DirectionBlockViewModel):
+            edited_block = DirectionBlockViewModel(parent=block.parent())
+            direction_block_to_viewmodel(viewmodel_to_direction_block(block), edited_block)
+            editing_accepted = self._edit_text_block(block)
+        elif isinstance(block, LineBlockViewModel):
+            edited_block = LineBlockViewModel(parent=block.parent())
+            line_block_to_viewmodel(viewmodel_to_line_block(block), edited_block)
+            editing_accepted = self._edit_text_block(block)
         elif isinstance(block, CellBlockViewModel):
-            self._edit_cell_block(block)
+            edited_block = CellBlockViewModel(parent=block.parent())
+            cell_block_to_viewmodel(viewmodel_to_cell_block(block), edited_block)
+            editing_accepted = self._edit_cell_block(edited_block)
         else:
             return
 
-        # After editing, recompute row data
-        type_str, beat_left, text_str, beat_right, attr_str = self._block_row_data(block)
-
-        # --- Column 0: Type ---
-        type_item.setText(type_str)
-        type_item.setData(Qt.ItemDataRole.UserRole, block)
-
-        # --- Column 1: Beat (L) ---
-        beat_left_item = self._block_list.item(row, 1)
-        if beat_left_item is None:
-            beat_left_item = QTableWidgetItem()
-            self._block_list.setItem(row, 1, beat_left_item)
-        beat_left_item.setText(beat_left or "")
-
-        # --- Column 2: Text (VerticalTextWidget) ---
-        old_text_widget = self._block_list.cellWidget(row, 2)
-        if old_text_widget is not None:
-            old_text_widget.setParent(None)
-        new_text_widget = VerticalTextWidget(text_str, parent=self._block_list)
-        self._block_list.setCellWidget(row, 2, new_text_widget)
-
-        # --- Column 3: Beat (R) ---
-        beat_right_item = self._block_list.item(row, 3)
-        if beat_right_item is None:
-            beat_right_item = QTableWidgetItem()
-            self._block_list.setItem(row, 3, beat_right_item)
-        beat_right_item.setText(beat_right or "")
-
-        # --- Column 4: Attributes ---
-        attr_item = self._block_list.item(row, 4)
-        if attr_item is None:
-            attr_item = QTableWidgetItem()
-            self._block_list.setItem(row, 4, attr_item)
-        attr_item.setText(attr_str)
-
+        if editing_accepted:
+            self._document_service.edit_block(
+                self._document_vm.current_page_index,
+                self._document_vm.selected_zone_index,
+                self._document_vm.selected_block_index,
+                edited_block
+            )
         self._block_list.resizeRowsToContents()
 
-    def _edit_text_block(self, block: object) -> None:
+    def _edit_text_block(self, block: object) -> bool:
         """
         Simple dialog for editing one of the text based blocks.
+        Returns True if the editing was accepted.
         """
         dialog = QDialog(self)
         if isinstance(block, TitleBlockViewModel):
@@ -769,7 +768,7 @@ class ZoneContentEditor(QWidget):
         layout.addLayout(button_box)
 
         if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+            return False
 
         if plist_edit is not None and isinstance(block, (RoleAnnotBlockViewModel, DirectionBlockViewModel)):
             raw = plist_edit.text()
@@ -783,12 +782,15 @@ class ZoneContentEditor(QWidget):
         elif isinstance(block, (RoleAnnotBlockViewModel, DirectionBlockViewModel, LineBlockViewModel)):
             block.content = text
 
-    def _edit_cell_block(self, cell_block: CellBlockViewModel) -> None:
+        return True
+
+    def _edit_cell_block(self, cell_block: CellBlockViewModel) -> bool:
         """
         Opens a dialog to edit a CellBlockViewModel and its nested cells.
         """
         dialog = CellBlockDialog(cell_block, parent=self)
-        dialog.exec()
+        result = dialog.exec()
+        return result == QDialog.DialogCode.Accepted
 
     def _block_selection_changed(self) -> None:
         selected_block = self._block_list.currentRow()

@@ -560,6 +560,70 @@ class RemoveBlockCommand(Command):
         elif self.block_index < selected:
             self.document_vm.selected_block_index = selected + 1
 
+
+class EditBlockCommand(Command):
+    """
+    Edits the zone block content in the document viewmodel.
+    """
+
+    def __init__(self,
+                 document_vm: DocumentViewModel,
+                 surface_index: int,
+                 zone_index: int,
+                 block_index: int,
+                 new_block: ContentBlockViewModel):
+        """
+        :param document_vm: Document viewmodel.
+        :param surface_index: Index of surface which contains the zone to be removed.
+        :param zone_index: Index of the current zone.
+        :param block_index: Index of the block to be moved.
+        :param new_block: New block content.
+        """
+        self.document_vm = document_vm
+        self.surface_index = surface_index
+        self.zone_index = zone_index
+        self.block_index = block_index
+        self.new_block = new_block
+
+        self.old_block = None
+
+        if not 0 <= surface_index < len(self.document_vm.surfaces):
+            raise IndexError(f"Surface index out of range: {surface_index}")
+
+        if not 0 <= zone_index < len(self.document_vm.surfaces[surface_index].zones):
+            raise IndexError(f"Zone index out of range: {zone_index}")
+
+        if not 0 <= block_index < len(self.document_vm.surfaces[surface_index].zones[zone_index].content.content):
+            raise IndexError(f"Block index out of range: {block_index}")
+
+    def name(self):
+        return "Edit Block Content"
+
+    def do(self):
+        surface_vm: SurfaceViewModel = self.document_vm.surfaces[self.surface_index]
+        zone_vm = surface_vm.zones[self.zone_index]
+
+        blocks = list(zone_vm.content.content)
+        self.old_block = blocks.pop(self.block_index)
+        blocks.insert(self.block_index, self.new_block)
+
+        zone_vm.content.content = tuple(blocks)
+
+        self.document_vm.dirty = True
+
+    def undo(self):
+        surface_vm: SurfaceViewModel = self.document_vm.surfaces[self.surface_index]
+        zone_vm = surface_vm.zones[self.zone_index]
+
+        blocks = list(zone_vm.content.content)
+        blocks.pop(self.block_index)
+        blocks.insert(self.block_index, self.old_block)
+
+        zone_vm.content.content = tuple(blocks)
+
+        self.document_vm.dirty = True
+
+
 class ChangeBlockOrderCommand(Command):
     """
     Changes the zone content block order in the document viewmodel.

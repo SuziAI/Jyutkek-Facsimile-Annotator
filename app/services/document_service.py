@@ -10,7 +10,7 @@ from app.repositories.document_repository import DocumentRepository
 from app.repositories.text_repository import TextRepository
 from app.services.command_service import Command, AddZoneCommand, RemoveZoneCommand, UpdateZoneRectCommand, \
     SetDocumentTypeCommand, GoToPageCommand, AddSurfacesCommand, RemoveSurfaceCommand, ChangeZoneOrderCommand, \
-    AddBlockCommand, RemoveBlockCommand, ChangeBlockOrderCommand
+    AddBlockCommand, RemoveBlockCommand, ChangeBlockOrderCommand, EditBlockCommand
 from app.services.mapping_service import document_to_viewmodel, viewmodel_to_document
 from app.services.xml_export_service import viewmodel_to_xml
 from app.viewmodels.content_block_viewmodel import ContentBlockViewModel
@@ -100,6 +100,7 @@ class DocumentService(QObject):
         set_document_type (Literal["TEI", "MEI"]): Sets the document type.
         add_block (int, int, ContentBlockViewModel): Adds a zone content block to the document.
         remove_block (int, int, int): Removes a zone content block from the document.
+        edit_block (int, int, int, ContentBlockViewModel): Edit a zone content block from the document.
         change_block_order (int, int, int): Changes the zone content block order in the document.
     """
     open_succeeded = Signal()
@@ -371,6 +372,25 @@ class DocumentService(QObject):
             surface_index=surface_index,
             zone_index=zone_index,
             block_index=block_index,
+        )
+        self.do_command(cmd)
+
+    def edit_block(self,
+                   surface_index: int, zone_index: int, block_index: int, new_block: ContentBlockViewModel) -> None:
+        """
+        Edit a zone content block.
+
+        :param surface_index: Index of surface.
+        :param zone_index: Index of zone.
+        :param block_index: Index of block to be edited.
+        :param new_block: New block data.
+        """
+        cmd = EditBlockCommand(
+            document_vm=self._document_vm,
+            surface_index=surface_index,
+            zone_index=zone_index,
+            block_index=block_index,
+            new_block=new_block,
         )
         self.do_command(cmd)
 
