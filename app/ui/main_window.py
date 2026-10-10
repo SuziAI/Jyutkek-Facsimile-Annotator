@@ -242,10 +242,7 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(root)
         main_layout.addWidget(self._canvas, stretch=1)
 
-        tab_widget = QTabWidget(self)
-
-        # ZONES TAB
-        # ------------------------------------------------
+        # === ZONES DOCK ===
         zones_tab = QWidget(self)
         zones_layout = QVBoxLayout(zones_tab)
         zones_layout.addWidget(self._image_label)
@@ -254,10 +251,10 @@ class MainWindow(QMainWindow):
 
         coordinate_layout = QVBoxLayout()
         for label, spinbox in (
-            ("ulx", self._ulx_spin),
-            ("uly", self._uly_spin),
-            ("lrx", self._lrx_spin),
-            ("lry", self._lry_spin),
+                ("ulx", self._ulx_spin),
+                ("uly", self._uly_spin),
+                ("lrx", self._lrx_spin),
+                ("lry", self._lry_spin),
         ):
             row = QHBoxLayout()
             row.addWidget(QLabel(label, self))
@@ -273,30 +270,44 @@ class MainWindow(QMainWindow):
 
         zones_tab.setMinimumWidth(340)
         zones_tab.setLayout(zones_layout)
-        tab_widget.addTab(zones_tab, "Zones")
 
-        # CONTENT TAB
-        # ------------------------------------------------
-        content_tab = QWidget(self)
-        content_layout = QVBoxLayout(content_tab)
-
-        self._content_editor = ZoneContentEditor(self._document_vm, self._document_service, parent=self)
-        content_layout.addWidget(self._content_editor)
-
-        content_tab.setLayout(content_layout)
-        tab_widget.addTab(content_tab, "Content")
-
-        # Dock
-        # ------------------------------------------------
-
-        dock = QDockWidget("Page Zones", self)
-        dock.setObjectName("dock")
-        dock.setWidget(tab_widget)
-        dock.setFeatures(
+        zones_dock = QDockWidget("Page Zones", self)
+        zones_dock.setObjectName("zones_dock")
+        zones_dock.setWidget(zones_tab)
+        zones_dock.setFeatures(
             QDockWidget.DockWidgetFeature.DockWidgetMovable |
             QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, zones_dock)
+
+        # === CONTENT DOCK ===
+        content_tab = QWidget(self)
+        content_layout = QVBoxLayout(content_tab)
+
+        self._content_editor = ZoneContentEditor(
+            self._document_vm,
+            self._document_service,
+            parent=self
+        )
+        content_layout.addWidget(self._content_editor)
+
+        content_tab.setLayout(content_layout)
+
+        content_dock = QDockWidget("Zone Content", self)
+        content_dock.setObjectName("content_dock")
+        content_dock.setWidget(content_tab)
+        content_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable |
+            QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, content_dock)
+
+        self.tabifyDockWidget(zones_dock, content_dock)
+        self.setDockOptions(
+            QMainWindow.DockOption.AnimatedDocks |
+            QMainWindow.DockOption.AllowTabbedDocks |
+            QMainWindow.DockOption.VerticalTabs
+        )
 
         self.setCentralWidget(root)
         self.resize(1280, 850)
