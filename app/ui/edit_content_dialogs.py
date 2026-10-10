@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QLabel, QHBoxLayout, QPushButton, \
-    QComboBox, QGroupBox, QTextEdit, QTableWidget, QTableWidgetItem, QHeaderView
+    QComboBox, QGroupBox, QTextEdit, QTableWidget, QTableWidgetItem, QHeaderView, QGridLayout
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
@@ -245,11 +245,9 @@ class ZoneContentEditor(QWidget):
     It provides
         * a combo box to select the content type (None, Metadata, Recitativo, Qupai),
         * a list of content blocks,
-        * buttons to add, remove and edit content blocks.
-
-    Depending on the selected content type, it manages
-        BodyMetadataViewModel, BodyRecitativoViewModel or BodyQupaiViewModel
-    and the corresponding block viewmodels.
+        * buttons to add, remove and edit content blocks,
+        * a tools panel with shortcut buttons for Qupai cells, Qupai roles/directions,
+          and Recitativo roles/directions.
     """
 
     def __init__(self,
@@ -265,9 +263,10 @@ class ZoneContentEditor(QWidget):
         self._document_service.undo_redo_changed.connect(self._update_enabled_state)
         self._document_vm.selected_block_index_changed.connect(self._update_enabled_state)
 
+        # main layout
         main_layout = QVBoxLayout(self)
 
-        # Content type selection
+        # --- Content type selection ---
         type_layout = QHBoxLayout()
         type_layout.addWidget(QLabel("Content type:", self))
         self._type_combo = QComboBox(self)
@@ -277,8 +276,11 @@ class ZoneContentEditor(QWidget):
         type_layout.addStretch(1)
         main_layout.addLayout(type_layout)
 
-        # Block list as a 5-column table:
-        # 0: Type, 1: Beat (left), 2: Text, 3: Beat (right), 4: Attributes
+        # --- Blocks + Tools side by side ---
+        content_layout = QHBoxLayout()
+        main_layout.addLayout(content_layout)
+
+        # Left: Blocks group
         block_group = QGroupBox("Blocks", self)
         block_layout = QVBoxLayout(block_group)
 
@@ -289,20 +291,17 @@ class ZoneContentEditor(QWidget):
         self._block_list.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._block_list.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
-        # Column sizing
         header = self._block_list.horizontalHeader()
         header.setStretchLastSection(True)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Type
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Beat (L)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Text
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Beat (R)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Attributes
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)           # Attributes
 
         self._block_list.cellDoubleClicked.connect(self._edit_block)
         self._block_list.itemClicked.connect(self._block_selection_changed)
         block_layout.addWidget(self._block_list)
-
-        # --- Button rows ---
 
         # Row 1: Add / Remove / Edit
         row1_layout = QHBoxLayout()
@@ -341,9 +340,30 @@ class ZoneContentEditor(QWidget):
         block_layout.addLayout(row2_layout)
 
         block_group.setLayout(block_layout)
-        main_layout.addWidget(block_group)
+        content_layout.addWidget(block_group, stretch=3)
+
+        # Right: Tools panel
+        tools_group = QGroupBox("Shortcuts", self)
+        self._tools_layout = QVBoxLayout(tools_group)
+
+        # Build all tool groups
+        self._build_recitativo_direction_tools()
+        self._build_recitativo_role_tools()
+        self._build_qupai_direction_tools()
+        self._build_qupai_role_tools()
+        self._build_qupai_cell_tools()
+        self._build_qupai_beat_tools()
+        self._build_qupai_prolongation_tools()
+
+        self._tools_layout.addStretch(1)
+        tools_group.setLayout(self._tools_layout)
+        content_layout.addWidget(tools_group, stretch=2)
 
         self._update_enabled_state()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def set_zone(self, zone: ZoneViewModel | None) -> None:
         """
@@ -351,6 +371,10 @@ class ZoneContentEditor(QWidget):
         """
         self._zone = zone
         self._reload_from_zone()
+
+    # ------------------------------------------------------------------
+    # Internal: loading / populating
+    # ------------------------------------------------------------------
 
     def _reload_from_zone(self) -> None:
         """
@@ -384,9 +408,6 @@ class ZoneContentEditor(QWidget):
     ) -> tuple[str, str | None, str, str | None, str]:
         """
         Returns (Type, BeatLeft, Text, BeatRight, Attributes) for display.
-
-        BeatLeft/BeatRight can be None when not applicable.
-        Text is the main text shown in the vertical Text column.
         """
         # Title
         if isinstance(block, TitleBlockViewModel):
@@ -414,14 +435,13 @@ class ZoneContentEditor(QWidget):
 
         # CellBlock
         if isinstance(block, CellBlockViewModel):
-            text_display = block.syl.content if block.syl is not None else None
-            gongche_display = block.gongche.content if block.gongche is not None else None
-            beat_display = block.beat.content if block.beat is not None else None
+            text_display = block.syl.content if block.syl is not None else ""
+            gongche_display = block.gongche.content if block.gongche is not None else ""
+            beat_display = block.beat.content if block.beat is not None else ""
 
-            if block.prolongation_dot is not None:
+            if block.prolongation_dot is not None and gongche_display is not None:
                 gongche_display += block.prolongation_dot.content
 
-            # Attributes: more detailed summary
             parts = []
             if block.beat is not None:
                 parts.append(f'type="{block.beat.beat}"')
@@ -433,7 +453,6 @@ class ZoneContentEditor(QWidget):
 
             return "Cell", text_display, gongche_display, beat_display, attr
 
-        # Fallback
         type_name = type(block).__name__
         return type_name, None, repr(block), None, ""
 
@@ -453,25 +472,24 @@ class ZoneContentEditor(QWidget):
         for row, block in enumerate(blocks):
             type_str, beat_left, text_str, beat_right, attr_str = self._block_row_data(block)
 
-            # --- Column 0: Type (QTableWidgetItem, UserRole stores block) ---
+            # Column 0: Type (UserRole stores block)
             type_item = QTableWidgetItem(type_str)
             type_item.setData(Qt.ItemDataRole.UserRole, block)
-
             self._block_list.setItem(row, 0, type_item)
 
-            # --- Column 1: Beat (L) ---
+            # Column 1: Beat (left)
             beat_left_item = QTableWidgetItem(beat_left or "")
             self._block_list.setItem(row, 1, beat_left_item)
 
-            # --- Column 2: Text (VerticalTextWidget) ---
+            # Column 2: Text (vertical)
             text_widget = VerticalTextWidget(text_str, parent=self._block_list)
             self._block_list.setCellWidget(row, 2, text_widget)
 
-            # --- Column 3: Beat (R) ---
+            # Column 3: Beat (right)
             beat_right_item = QTableWidgetItem(beat_right or "")
             self._block_list.setItem(row, 3, beat_right_item)
 
-            # --- Column 4: Attributes ---
+            # Column 4: Attributes
             attr_item = QTableWidgetItem(attr_str)
             self._block_list.setItem(row, 4, attr_item)
 
@@ -496,6 +514,10 @@ class ZoneContentEditor(QWidget):
             return
         body.content = blocks  # type: ignore[assignment]
         self._zone.content = body  # type: ignore[arg-type]
+
+    # ------------------------------------------------------------------
+    # Content type / enabled state
+    # ------------------------------------------------------------------
 
     def _content_type_changed(self, _index: int) -> None:
         """
@@ -525,25 +547,98 @@ class ZoneContentEditor(QWidget):
         """
         Enables or disables the editor widgets based on selection and type.
         """
-        enabled = self._zone is not None
-        self._type_combo.setEnabled(enabled)
+        zone_selected = self._zone is not None
+        self._type_combo.setEnabled(zone_selected)
 
-        # allow adding and removing blocks only with actual content types
-        enabled = enabled and self._zone.content is not None
-        self._block_list.setEnabled(enabled)
-        self._add_block_btn.setEnabled(enabled)
-        self._remove_block_btn.setEnabled(enabled)
+        body = self._current_body()
+        has_body = zone_selected and body is not None
 
-        # editing, moving up/down is only possible when a block is selected
-        enabled = enabled and self._document_vm.selected_block_index is not None
-        self._edit_block_btn.setEnabled(enabled)
-        self._move_block_up_button.setEnabled(enabled)
-        self._move_block_down_button.setEnabled(enabled)
+        self._block_list.setEnabled(has_body)
+        self._add_block_btn.setEnabled(has_body)
+        self._remove_block_btn.setEnabled(has_body)
+
+        selected_index = self._document_vm.selected_block_index
+        block_selected = has_body and selected_index is not None
+
+        self._edit_block_btn.setEnabled(block_selected)
+        self._move_block_up_button.setEnabled(block_selected)
+        self._move_block_down_button.setEnabled(block_selected)
+
+        self._update_tools_enabled()
+
+    def _update_tools_enabled(self) -> None:
+        """
+        Enables/disables all shortcut buttons based on body type and selected block type.
+        Buttons remain visible at all times.
+        """
+        body = self._current_body()
+        index = self._document_vm.selected_block_index
+        zone_has_body = body is not None
+        block_selected = index is not None and zone_has_body
+
+        # Disable everything by default
+        for btn in getattr(self, "_gongche_buttons", []):
+            btn.setEnabled(False)
+        for btn in getattr(self, "_beat_buttons", []):
+            btn.setEnabled(False)
+        for btn in getattr(self, "_recit_dir_buttons", []):
+            btn.setEnabled(False)
+        for btn in getattr(self, "_recit_role_buttons", []):
+            btn.setEnabled(False)
+        for btn in getattr(self, "_qupai_dir_buttons", []):
+            btn.setEnabled(False)
+        for btn in getattr(self, "_qupai_role_buttons", []):
+            btn.setEnabled(False)
+        if hasattr(self, "_btn_no_dot"):
+            self._btn_no_dot.setEnabled(False)
+        if hasattr(self, "_btn_with_dot"):
+            self._btn_with_dot.setEnabled(False)
+
+        if not block_selected:
+            return
+
+        type_item = self._block_list.item(index, 0)
+        if type_item is None:
+            return
+        block = type_item.data(Qt.ItemDataRole.UserRole)
+
+        # Enable Qupai Cell tools
+        if isinstance(body, BodyQupaiViewModel) and isinstance(block, CellBlockViewModel):
+            for btn in self._gongche_buttons:
+                btn.setEnabled(True)
+            for btn in self._beat_buttons:
+                btn.setEnabled(True)
+            self._btn_no_dot.setEnabled(True)
+            self._btn_with_dot.setEnabled(True)
+
+        # Recitativo Direction
+        if isinstance(body, BodyRecitativoViewModel) and isinstance(block, DirectionBlockViewModel):
+            for btn in self._recit_dir_buttons:
+                btn.setEnabled(True)
+
+        # Recitativo RoleAnnot
+        if isinstance(body, BodyRecitativoViewModel) and isinstance(block, RoleAnnotBlockViewModel):
+            for btn in self._recit_role_buttons:
+                btn.setEnabled(True)
+
+        # Qupai Direction
+        if isinstance(body, BodyQupaiViewModel) and isinstance(block, DirectionBlockViewModel):
+            for btn in self._qupai_dir_buttons:
+                btn.setEnabled(True)
+
+        # Qupai RoleAnnot
+        if isinstance(body, BodyQupaiViewModel) and isinstance(block, RoleAnnotBlockViewModel):
+            for btn in self._qupai_role_buttons:
+                btn.setEnabled(True)
+
+    # ------------------------------------------------------------------
+    # Block operations
+    # ------------------------------------------------------------------
 
     def _add_block(self) -> None:
         """
         Adds a block of a type suitable for the current body.
-        Now uses DialogSelectBlockType so the user can choose the block type.
+        Uses DialogSelectBlockType so the user can choose the block type.
         """
         surface_index = self._document_vm.current_page_index
         zone_index = self._document_vm.selected_zone_index
@@ -554,7 +649,6 @@ class ZoneContentEditor(QWidget):
         if body is None:
             return
 
-        # 1) Determine allowed choices based on body type
         if isinstance(body, BodyMetadataViewModel):
             choices = ["Title", "Paragraph"]
         elif isinstance(body, BodyRecitativoViewModel):
@@ -564,14 +658,12 @@ class ZoneContentEditor(QWidget):
         else:
             return
 
-        # 2) Show dialog to pick the type
         dlg = DialogSelectBlockType(choices, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
-        selected = dlg.selected_type  # or whatever attribute your dialog exposes
+        selected = dlg.selected_type
 
-        # 3) Construct the new block based on `body` and the selected type
         if isinstance(body, BodyMetadataViewModel):
             if selected == "Title":
                 new_block = TitleBlockViewModel(title="", parent=body)
@@ -603,7 +695,6 @@ class ZoneContentEditor(QWidget):
         else:
             return
 
-        # 4) Delegate the *mutation* to DocumentService so it becomes undoable
         self._document_service.add_block(
             surface_index=surface_index,
             zone_index=zone_index,
@@ -644,11 +735,6 @@ class ZoneContentEditor(QWidget):
         """
         Moves the currently selected block one position up.
         """
-
-    def _move_block_up(self) -> None:
-        """
-        Moves the currently selected block one position up.
-        """
         self._document_service.change_block_order(
             self._document_vm.current_page_index,
             self._document_vm.selected_zone_index,
@@ -670,7 +756,6 @@ class ZoneContentEditor(QWidget):
     def _edit_block(self, row: int, _column: int) -> None:
         """
         Opens an editor for the double-clicked or selected block.
-        Called by cellDoubleClicked(row, column).
         """
         type_item = self._block_list.item(row, 0)
         if type_item is None:
@@ -678,30 +763,26 @@ class ZoneContentEditor(QWidget):
 
         block = type_item.data(Qt.ItemDataRole.UserRole)
 
-        # since we want the editing operation to be undoable,
-        # do not directly mutate the block. Instead, make
-        # a model out of it and get a new viewmodel from it!
-
         if isinstance(block, TitleBlockViewModel):
             edited_block = TitleBlockViewModel(parent=block.parent())
             title_block_to_viewmodel(viewmodel_to_title_block(block), edited_block)
-            editing_accepted = self._edit_text_block(block)
+            editing_accepted = self._edit_text_block(edited_block)
         elif isinstance(block, ParagraphBlockViewModel):
             edited_block = ParagraphBlockViewModel(parent=block.parent())
             paragraph_block_to_viewmodel(viewmodel_to_paragraph_block(block), edited_block)
-            editing_accepted = self._edit_text_block(block)
+            editing_accepted = self._edit_text_block(edited_block)
         elif isinstance(block, RoleAnnotBlockViewModel):
             edited_block = RoleAnnotBlockViewModel(parent=block.parent())
             role_annot_block_to_viewmodel(viewmodel_to_role_annot_block(block), edited_block)
-            editing_accepted = self._edit_text_block(block)
+            editing_accepted = self._edit_text_block(edited_block)
         elif isinstance(block, DirectionBlockViewModel):
             edited_block = DirectionBlockViewModel(parent=block.parent())
             direction_block_to_viewmodel(viewmodel_to_direction_block(block), edited_block)
-            editing_accepted = self._edit_text_block(block)
+            editing_accepted = self._edit_text_block(edited_block)
         elif isinstance(block, LineBlockViewModel):
             edited_block = LineBlockViewModel(parent=block.parent())
             line_block_to_viewmodel(viewmodel_to_line_block(block), edited_block)
-            editing_accepted = self._edit_text_block(block)
+            editing_accepted = self._edit_text_block(edited_block)
         elif isinstance(block, CellBlockViewModel):
             edited_block = CellBlockViewModel(parent=block.parent())
             cell_block_to_viewmodel(viewmodel_to_cell_block(block), edited_block)
@@ -798,3 +879,420 @@ class ZoneContentEditor(QWidget):
             self._document_service.select_block(None)
             return
         self._document_service.select_block(selected_block)
+
+    # ------------------------------------------------------------------
+    # Tools: creation
+    # ------------------------------------------------------------------
+
+    def _build_qupai_cell_tools(self) -> None:
+        gongche_group = QGroupBox("Qupai (Pitch)", self)
+        grid = QGridLayout(gongche_group)
+
+        rows = [
+            [
+                ("lower_he", "佮"),
+                ("lower_shi", "仕"),
+                ("lower_yi", "亿"),
+                ("lower_shang", "仩"),
+                ("lower_che", "伬"),
+                ("lower_gong", "仜"),
+                ("lower_fan", "仮")
+            ],
+            [
+                ("he", "合"),
+                ("shi", "士"),
+                ("yi", "乙"),
+                ("shang", "上"),
+                ("che", "尺"),
+                ("gong", "工"),
+                ("fan", "反"),
+            ],
+            [
+                ("liu", "六"),
+                ("wu", "五"),
+                ("higher_yi", "𢒼"),
+                ("sheng", "生"),
+                ("higher_che", "鿈"),
+                ("higher_gong", "𢓁"),
+                ("higher_fan", "𢓉"),
+            ],
+            [
+                ("higher_liu", "𢓌"),
+                ("higher_wu", "鿉")
+            ]
+        ]
+
+        self._gongche_buttons: list[QPushButton] = []
+
+        for row_idx, row_data in enumerate(rows):
+            for col_idx, (pname, content) in enumerate(row_data):
+                btn = QPushButton(content, self)
+                btn.setToolTip(f"Set gongche to {content} ({pname})")
+                btn.clicked.connect(
+                    lambda checked=False, pn=pname, ct=content: self._apply_qupai_cell_gongche(pn, ct)
+                )
+                grid.addWidget(btn, row_idx, col_idx)
+                self._gongche_buttons.append(btn)
+
+        gongche_group.setLayout(grid)
+        self._tools_layout.addWidget(gongche_group)
+
+    def _build_qupai_beat_tools(self) -> None:
+        beat_group = QGroupBox("Qupai (Beat)", self)
+        layout = QHBoxLayout(beat_group)
+
+        specs = [
+            ("strong", "×", "Strong beat on syllable"),
+            ("strong", "⨱", "Strong beat without syllable"),
+            ("weak", "、", "Weak beat on syllable"),
+            ("weak", "⌞", "Weak beat without syllable"),
+        ]
+
+        self._beat_buttons: list[QPushButton] = []
+
+        for beat, content, tooltip in specs:
+            btn = QPushButton(content, self)
+            btn.setToolTip(tooltip)
+            btn.clicked.connect(
+                lambda checked=False, b=beat, ct=content: self._apply_qupai_cell_beat(b, ct)
+            )
+            layout.addWidget(btn)
+            self._beat_buttons.append(btn)
+
+        beat_group.setLayout(layout)
+        self._tools_layout.addWidget(beat_group)
+
+    def _build_qupai_prolongation_tools(self) -> None:
+        pd_group = QGroupBox("Qupai (Prolongation Dot)", self)
+        layout = QHBoxLayout(pd_group)
+
+        self._btn_no_dot = QPushButton("No Dot", self)
+        self._btn_with_dot = QPushButton("·", self)
+
+        self._btn_no_dot.setToolTip("Remove prolongation dot")
+        self._btn_with_dot.setToolTip("Add prolongation dot ·")
+
+        self._btn_no_dot.clicked.connect(lambda checked=False: self._apply_qupai_prolongation_dot(False))
+        self._btn_with_dot.clicked.connect(lambda checked=False: self._apply_qupai_prolongation_dot(True))
+
+        layout.addWidget(self._btn_no_dot)
+        layout.addWidget(self._btn_with_dot)
+
+        pd_group.setLayout(layout)
+        self._tools_layout.addWidget(pd_group)
+
+    def _build_recitativo_direction_tools(self) -> None:
+        group = QGroupBox("Recitativo (Direction)", self)
+        layout = QHBoxLayout(group)
+
+        specs = [
+            ("#recitativo", "詩白", "Start recitativo"),
+            (None, "接白", "Continue recitativo"),
+        ]
+
+        self._recit_dir_buttons: list[QPushButton] = []
+
+        for plist, content, tooltip in specs:
+            btn = QPushButton(content, self)
+            btn.setToolTip(tooltip)
+            btn.clicked.connect(
+                lambda checked=False, pl=plist, ct=content: self._apply_recitativo_direction(pl, ct)
+            )
+            layout.addWidget(btn)
+            self._recit_dir_buttons.append(btn)
+
+        group.setLayout(layout)
+        self._tools_layout.addWidget(group)
+
+    def _build_recitativo_role_tools(self) -> None:
+        group = QGroupBox("Recitativo (Role)", self)
+        layout = QHBoxLayout(group)
+
+        specs = [
+            ("singer_sheng", "生"),
+            ("#singer_dan", "旦"),
+        ]
+
+        self._recit_role_buttons: list[QPushButton] = []
+
+        for plist, content in specs:
+            btn = QPushButton(content, self)
+            btn.setToolTip(f"Recitativo role: {content}")
+            btn.clicked.connect(
+                lambda checked=False, pl=plist, ct=content: self._apply_recitativo_role(pl, ct)
+            )
+            layout.addWidget(btn)
+            self._recit_role_buttons.append(btn)
+
+        group.setLayout(layout)
+        self._tools_layout.addWidget(group)
+
+    def _build_qupai_direction_tools(self) -> None:
+        group = QGroupBox("Qupai (Direction)", self)
+        layout = QHBoxLayout(group)
+
+        specs = [
+            ("#accompanied", "!TODO!", "（曲牌）", "Start of Qupai"),   # accompanied, empty content
+            (None, "接唱", "接唱", "Continue Qupai"),                   # plain "接唱"
+        ]
+
+        self._qupai_dir_buttons: list[QPushButton] = []
+
+        for plist, content, label, tooltip in specs:
+            btn = QPushButton(label, self)
+            btn.setToolTip(tooltip)
+            btn.clicked.connect(
+                lambda checked=False, pl=plist, ct=content: self._apply_qupai_direction(pl, ct)
+            )
+            layout.addWidget(btn)
+            self._qupai_dir_buttons.append(btn)
+
+        group.setLayout(layout)
+        self._tools_layout.addWidget(group)
+
+    def _build_qupai_role_tools(self) -> None:
+        group = QGroupBox("Qupai (Role)", self)
+        layout = QGridLayout(group)
+
+        specs = [
+            ("#singer_sheng", "生", "生", "Annotated 生, start with 生"),
+            ("#singer_dan", "旦", "旦", "Annotated 旦, start with 旦"),
+            ("#orchestra", "生", "生 (orchestra)", "Annotated 生, start with orchestra-only"),
+            ("#orchestra", "旦", "旦 (orchestra)", "Annotated 旦, start with orchestra-only"),
+            (None, "（", "（", "Start of orchestra-only, already annotated"),
+            ("#orchestra", "（", "（ (orchestra)", "After singing, start with orchestra-only"),
+            ("#singer_sheng", "）", "）(生)", "After orchestra-only, start with 生"),
+            ("#singer_dan", "）", "）(旦)", "After orchestra-only, start with 旦"),
+        ]
+
+        self._qupai_role_buttons: list[QPushButton] = []
+
+        for idx, (plist, content, label, tooltip) in enumerate(specs):
+            btn = QPushButton(label, self)
+            btn.setToolTip(tooltip)
+            btn.clicked.connect(
+                lambda checked=False, pl=plist, ct=content: self._apply_qupai_role(pl, ct)
+            )
+            row, col = divmod(idx, 4)
+            layout.addWidget(btn, row, col)
+            self._qupai_role_buttons.append(btn)
+
+        group.setLayout(layout)
+        self._tools_layout.addWidget(group)
+
+    # ------------------------------------------------------------------
+    # Tools: mutation handlers
+    # ------------------------------------------------------------------
+
+    def _apply_qupai_cell_gongche(self, pname: str, content: str) -> None:
+        index = self._document_vm.selected_block_index
+        if index is None or self._zone is None:
+            return
+
+        if not isinstance(self._zone.content, BodyQupaiViewModel):
+            return
+
+        type_item = self._block_list.item(index, 0)
+        if type_item is None:
+            return
+        block = type_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(block, CellBlockViewModel):
+            return
+
+        edited_block = CellBlockViewModel(parent=block.parent())
+        cell_block_to_viewmodel(viewmodel_to_cell_block(block), edited_block)
+
+        if edited_block.gongche is None:
+            edited_block.gongche = GongcheCellViewModel(parent=edited_block)
+        edited_block.gongche.pname = pname
+        edited_block.gongche.content = content
+
+        self._document_service.edit_block(
+            self._document_vm.current_page_index,
+            self._document_vm.selected_zone_index,
+            index,
+            edited_block,
+        )
+
+    def _apply_qupai_cell_beat(self, beat: str, content: str) -> None:
+        index = self._document_vm.selected_block_index
+        if index is None or self._zone is None:
+            return
+
+        if not isinstance(self._zone.content, BodyQupaiViewModel):
+            return
+
+        type_item = self._block_list.item(index, 0)
+        if type_item is None:
+            return
+        block = type_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(block, CellBlockViewModel):
+            return
+
+        edited_block = CellBlockViewModel(parent=block.parent())
+        cell_block_to_viewmodel(viewmodel_to_cell_block(block), edited_block)
+
+        if edited_block.beat is None:
+            edited_block.beat = BeatCellViewModel(parent=edited_block)
+        edited_block.beat.beat = beat
+        edited_block.beat.content = content
+
+        self._document_service.edit_block(
+            self._document_vm.current_page_index,
+            self._document_vm.selected_zone_index,
+            index,
+            edited_block,
+        )
+
+    def _apply_qupai_prolongation_dot(self, use_dot: bool) -> None:
+        index = self._document_vm.selected_block_index
+        if index is None or self._zone is None:
+            return
+
+        if not isinstance(self._zone.content, BodyQupaiViewModel):
+            return
+
+        type_item = self._block_list.item(index, 0)
+        if type_item is None:
+            return
+        block = type_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(block, CellBlockViewModel):
+            return
+
+        edited_block = CellBlockViewModel(parent=block.parent())
+        cell_block_to_viewmodel(viewmodel_to_cell_block(block), edited_block)
+
+        if use_dot:
+            if edited_block.prolongation_dot is None:
+                edited_block.prolongation_dot = ProlongationDotCellViewModel(parent=edited_block)
+            edited_block.prolongation_dot.content = "·"
+        else:
+            edited_block.prolongation_dot = None
+
+        self._document_service.edit_block(
+            self._document_vm.current_page_index,
+            self._document_vm.selected_zone_index,
+            index,
+            edited_block,
+        )
+
+    def _apply_recitativo_direction(self, plist: str | None, content: str) -> None:
+        index = self._document_vm.selected_block_index
+        if index is None or self._zone is None:
+            return
+
+        if not isinstance(self._zone.content, BodyRecitativoViewModel):
+            return
+
+        type_item = self._block_list.item(index, 0)
+        if type_item is None:
+            return
+        block = type_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(block, DirectionBlockViewModel):
+            return
+
+        edited_block = DirectionBlockViewModel(parent=block.parent())
+        direction_block_to_viewmodel(viewmodel_to_direction_block(block), edited_block)
+
+        if plist is None:
+            edited_block.plist = ()
+        else:
+            edited_block.plist = (plist,)
+        edited_block.content = content
+
+        self._document_service.edit_block(
+            self._document_vm.current_page_index,
+            self._document_vm.selected_zone_index,
+            index,
+            edited_block,
+        )
+
+    def _apply_recitativo_role(self, plist: str, content: str) -> None:
+        index = self._document_vm.selected_block_index
+        if index is None or self._zone is None:
+            return
+
+        if not isinstance(self._zone.content, BodyRecitativoViewModel):
+            return
+
+        type_item = self._block_list.item(index, 0)
+        if type_item is None:
+            return
+        block = type_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(block, RoleAnnotBlockViewModel):
+            return
+
+        edited_block = RoleAnnotBlockViewModel(parent=block.parent())
+        role_annot_block_to_viewmodel(viewmodel_to_role_annot_block(block), edited_block)
+
+        edited_block.plist = (plist,)
+        edited_block.content = content
+
+        self._document_service.edit_block(
+            self._document_vm.current_page_index,
+            self._document_vm.selected_zone_index,
+            index,
+            edited_block,
+        )
+
+    def _apply_qupai_direction(self, plist: str | None, content: str) -> None:
+        index = self._document_vm.selected_block_index
+        if index is None or self._zone is None:
+            return
+
+        if not isinstance(self._zone.content, BodyQupaiViewModel):
+            return
+
+        type_item = self._block_list.item(index, 0)
+        if type_item is None:
+            return
+        block = type_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(block, DirectionBlockViewModel):
+            return
+
+        edited_block = DirectionBlockViewModel(parent=block.parent())
+        direction_block_to_viewmodel(viewmodel_to_direction_block(block), edited_block)
+
+        if plist is None:
+            edited_block.plist = ()
+        else:
+            edited_block.plist = (plist,)
+        edited_block.content = content
+
+        self._document_service.edit_block(
+            self._document_vm.current_page_index,
+            self._document_vm.selected_zone_index,
+            index,
+            edited_block,
+        )
+
+    def _apply_qupai_role(self, plist: str | None, content: str) -> None:
+        index = self._document_vm.selected_block_index
+        if index is None or self._zone is None:
+            return
+
+        if not isinstance(self._zone.content, BodyQupaiViewModel):
+            return
+
+        type_item = self._block_list.item(index, 0)
+        if type_item is None:
+            return
+        block = type_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(block, RoleAnnotBlockViewModel):
+            return
+
+        edited_block = RoleAnnotBlockViewModel(parent=block.parent())
+        role_annot_block_to_viewmodel(viewmodel_to_role_annot_block(block), edited_block)
+
+        if plist is None:
+            edited_block.plist = ()
+        else:
+            edited_block.plist = (plist,)
+        edited_block.content = content
+
+        self._document_service.edit_block(
+            self._document_vm.current_page_index,
+            self._document_vm.selected_zone_index,
+            index,
+            edited_block,
+        )
