@@ -258,6 +258,8 @@ class ZoneContentEditor(QWidget):
         self._zone: ZoneViewModel | None = None
 
         self._document_service.undo_redo_changed.connect(self._populate_block_list)
+        self._document_service.undo_redo_changed.connect(self._update_enabled_state)
+        self._document_vm.selected_block_index_changed.connect(self._update_enabled_state)
 
         main_layout = QVBoxLayout(self)
 
@@ -293,7 +295,7 @@ class ZoneContentEditor(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Attributes
 
         self._block_list.cellDoubleClicked.connect(self._edit_block)
-        self._block_list.itemSelectionChanged.connect(self._update_enabled_state)
+        self._block_list.itemSelectionChanged.connect(self._block_selection_changed)
         block_layout.addWidget(self._block_list)
 
         # --- Button rows ---
@@ -527,7 +529,7 @@ class ZoneContentEditor(QWidget):
         self._remove_block_btn.setEnabled(enabled)
 
         # editing, moving up/down is only possible when a block is selected
-        enabled = enabled and self._block_list.currentRow() >= 0
+        enabled = enabled and self._document_vm.selected_block_index is not None
         self._edit_block_btn.setEnabled(enabled)
         self._move_block_up_button.setEnabled(enabled)
         self._move_block_down_button.setEnabled(enabled)
@@ -613,24 +615,24 @@ class ZoneContentEditor(QWidget):
         if body is None:
             return
 
-        row = self._block_list.currentRow()
-        if row < 0:
+        selected_block = self._document_vm.selected_block_index
+        if selected_block is None:
             return
 
         self._document_service.remove_block(
             surface_index=surface_index,
             zone_index=zone_index,
-            block_index=row
+            block_index=selected_block
         )
 
     def _edit_block_clicked(self) -> None:
         """
         Slot for the 'Edit Block' button.
         """
-        row = self._block_list.currentRow()
-        if row < 0:
+        selected_block = self._document_vm.selected_block_index
+        if selected_block is None:
             return
-        self._edit_block(row, 0)
+        self._edit_block(selected_block, 0)
 
     def _move_block_up(self) -> None:
         """
@@ -640,23 +642,23 @@ class ZoneContentEditor(QWidget):
         if body is None:
             return
 
-        row = self._block_list.currentRow()
-        if row <= 0:  # nothing selected or already at top
+        selected_block = self._document_vm.selected_block_index
+        if selected_block is None:  # nothing selected or already at top
             return
 
         blocks = list(body.content)
-        if row >= len(blocks):
+        if selected_block >= len(blocks):
             return
 
         # swap row with row-1
-        blocks[row - 1], blocks[row] = blocks[row], blocks[row - 1]
+        blocks[selected_block - 1], blocks[selected_block] = blocks[selected_block], blocks[selected_block - 1]
 
         # write back and repopulate
         self._set_body_content(tuple(blocks))
         self._populate_block_list()
 
         # restore selection on the new row
-        self._block_list.selectRow(row - 1)
+        self._block_list.selectRow(selected_block - 1)
 
     def _move_block_down(self) -> None:
         """
@@ -666,23 +668,23 @@ class ZoneContentEditor(QWidget):
         if body is None:
             return
 
-        row = self._block_list.currentRow()
-        if row < 0:
+        selected_block = self._document_vm.selected_block_index
+        if selected_block is None:
             return
 
         blocks = list(body.content)
-        if row >= len(blocks) - 1:  # already at the bottom
+        if selected_block >= len(blocks) - 1:  # already at the bottom
             return
 
         # swap row with row+1
-        blocks[row], blocks[row + 1] = blocks[row + 1], blocks[row]
+        blocks[selected_block], blocks[selected_block + 1] = blocks[selected_block + 1], blocks[selected_block]
 
         # write back and repopulate
         self._set_body_content(tuple(blocks))
         self._populate_block_list()
 
         # restore selection on the new row
-        self._block_list.selectRow(row + 1)
+        self._block_list.selectRow(selected_block + 1)
 
     def _edit_block(self, row: int, _column: int) -> None:
         """
@@ -810,3 +812,10 @@ class ZoneContentEditor(QWidget):
         """
         dialog = CellBlockDialog(cell_block, parent=self)
         dialog.exec()
+
+    def _block_selection_changed(self) -> None:
+        selected_block = self._block_list.currentRow()
+        if selected_block < 0:
+            self._document_service.select_block(None)
+            return
+        self._document_service.select_block(selected_block)

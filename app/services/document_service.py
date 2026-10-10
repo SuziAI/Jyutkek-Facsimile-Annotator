@@ -17,7 +17,6 @@ from app.viewmodels.content_block_viewmodel import ContentBlockViewModel
 from app.viewmodels.document_viewmodel import DocumentViewModel
 from app.viewmodels.zone_viewmodel import ZoneViewModel
 
-
 T = TypeVar("T")
 
 
@@ -40,6 +39,7 @@ class RepoTask(QRunnable, Generic[T]):
     Methods:
         run: Starts the execution of the task.
     """
+
     def __init__(self, work: Callable[[], T]) -> None:
         """
         Initializes a task.
@@ -96,6 +96,7 @@ class DocumentService(QObject):
         update_zone_rect (int, int, int, int, int, int): Updates a specific zone's coordinates.
         change_zone_order (int, int, int): Changes the zone order in the document.
         select_zone (int): Marks a zone in the document as selected.
+        select_block (int): Marks a zone content block in the document as selected.
         set_document_type (Literal["TEI", "MEI"]): Sets the document type.
     """
     open_succeeded = Signal()
@@ -112,12 +113,12 @@ class DocumentService(QObject):
     undo_redo_changed = Signal(str, str)
 
     def __init__(
-        self,
-        document_repository: DocumentRepository,
-        text_repository: TextRepository,
-        document_viewmodel: DocumentViewModel,
-        thread_pool: QThreadPool | None = None,
-        parent: QObject | None = None,
+            self,
+            document_repository: DocumentRepository,
+            text_repository: TextRepository,
+            document_viewmodel: DocumentViewModel,
+            thread_pool: QThreadPool | None = None,
+            parent: QObject | None = None,
     ) -> None:
         """
         Initialize the service class.
@@ -274,13 +275,13 @@ class DocumentService(QObject):
         self.do_command(cmd)
 
     def update_zone_rect(
-        self,
-        surface_index: int,
-        zone_index: int,
-        ulx: int,
-        uly: int,
-        lrx: int,
-        lry: int,
+            self,
+            surface_index: int,
+            zone_index: int,
+            ulx: int,
+            uly: int,
+            lrx: int,
+            lry: int,
     ) -> None:
         """
         Updates a specific zone's coordinates.
@@ -316,6 +317,18 @@ class DocumentService(QObject):
             surface_vm = self._current_surface()
             self._zone_at(surface_vm, zone_index)
         self._document_vm.selected_zone_index = zone_index
+
+    def select_block(self, block_index: int | None) -> None:
+        """
+        Marks a zone content block in the document as selected.
+
+        :param block_index: Index of the block to be selected.
+        """
+        if (self._document_vm.current_page_index is not None and
+                self._document_vm.selected_zone_index is not None and block_index is not None):
+            zone_vm = self._current_zone()
+            self._block_at(zone_vm, block_index)
+        self._document_vm.selected_block_index = block_index
 
     def set_document_type(self, doc_type: Literal["TEI", "MEI"]) -> None:
         """
@@ -391,7 +404,17 @@ class DocumentService(QObject):
     def _current_surface(self):
         return self._surface_at(self._document_vm.current_page_index)
 
-    def _zone_at(self, surface_vm, index: int) -> ZoneViewModel:
+    def _current_zone(self):
+        return self._zone_at(self._current_surface(), self._document_vm.selected_zone_index)
+
+    @classmethod
+    def _zone_at(cls, surface_vm, index: int) -> ZoneViewModel:
         if not 0 <= index < len(surface_vm.zones):
             raise IndexError(f"Zone index out of range: {index}")
         return surface_vm.zones[index]
+
+    @classmethod
+    def _block_at(cls, zone_vm, index: int) -> ContentBlockViewModel:
+        if not 0 <= index < len(zone_vm.content.content):
+            raise IndexError(f"Block index out of range: {index}")
+        return zone_vm.content.content[index]

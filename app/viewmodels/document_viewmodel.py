@@ -19,6 +19,7 @@ class DocumentViewModel(QObject):
         file_path_changed (Signal(object)): Emitted when the file path is changed.
         dirty_changed (Signal(bool)): Emitted when the dirty state is changed.
         selected_zone_index_changed (Signal(object)): Emitted when the selected zone index is changed.
+        selected_block_index_changed (Signal(object)): Emitted when the selected zone block index is changed.
     """
     surfaces_changed = Signal()
     document_type_changed = Signal(str)
@@ -26,6 +27,7 @@ class DocumentViewModel(QObject):
     file_path_changed = Signal(object)
     dirty_changed = Signal(bool)
     selected_zone_index_changed = Signal(object)
+    selected_block_index_changed = Signal(object)
 
     def __init__(self, parent: QObject | None = None) -> None:
         """
@@ -40,6 +42,7 @@ class DocumentViewModel(QObject):
         self._file_path: Path | None = None
         self._dirty = False
         self._selected_zone_index: int | None = None
+        self._selected_block_index: int | None = None
 
     @property
     def surfaces(self) -> tuple[SurfaceViewModel, ...]:
@@ -108,3 +111,14 @@ class DocumentViewModel(QObject):
             return
         self._selected_zone_index = value
         self.selected_zone_index_changed.emit(self._selected_zone_index)
+
+    @property
+    def selected_block_index(self) -> int | None:
+        return self._selected_block_index
+
+    @selected_block_index.setter
+    def selected_block_index(self, value: int | None) -> None:
+        if value == self._selected_block_index:
+            return
+        self._selected_block_index = value
+        self.selected_block_index_changed.emit(self._selected_block_index)
