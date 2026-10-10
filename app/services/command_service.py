@@ -532,6 +532,7 @@ class RemoveBlockCommand(Command):
         blocks_list.insert(self.block_index, self.deleted_block)
         blocks.content = tuple(blocks_list)
         self.document_vm.dirty = True
+        self._adjust_selected_zone_index_undo()
 
     def _adjust_selected_zone_index_do(self):
         if self.surface_index != self.document_vm.current_page_index:
@@ -544,9 +545,8 @@ class RemoveBlockCommand(Command):
             return
         if selected == self.block_index:
             self.document_vm.selected_block_index = None
-        elif self.zone_index < selected:
+        elif self.block_index < selected:
             self.document_vm.selected_block_index = selected - 1
-        self._adjust_selected_zone_index_undo()
 
     def _adjust_selected_zone_index_undo(self):
         if self.surface_index != self.document_vm.current_page_index:

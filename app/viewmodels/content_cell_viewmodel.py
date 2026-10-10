@@ -86,9 +86,9 @@ class SylCellViewModel(QObject):
     SylCell viewmodel.
 
     Signals:
-        cell_changed (Signal(str, str)): Emitted when the syl cell content is changed.
+        cell_changed (Signal(object, str)): Emitted when the syl cell content is changed.
     """
-    cell_changed = Signal(str, str)
+    cell_changed = Signal(object, str)
 
     def __init__(
         self,
@@ -97,7 +97,7 @@ class SylCellViewModel(QObject):
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
-        self._con = Con
+        self._con = con
         self._content = content
 
     @property

@@ -100,9 +100,11 @@ class QtWindowSettings:
     Properties:
         geometry (QByteArray): Main window geometry.
         windowState (QByteArray): Window state (minimized/maximized/etc.).
+        content_shortcuts_visible (bool): Whether the content shortcuts should be visible/hidden.
     """
     geometry: QByteArray = dataclasses.field(default_factory=QByteArray)
     windowState: QByteArray = dataclasses.field(default_factory=QByteArray)
+    content_shortcuts_visible: bool = False
 
 
 @dataclass(frozen=True)

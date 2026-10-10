@@ -25,6 +25,7 @@ class SettingsViewModel(QObject):
 
         geometry: QByteArray | None = None,
         windowState: QByteArray | None = None,
+        content_shortcuts_visible: bool | None = None,
 
         image_brightness: float_range[0., 2., 0.1] | None = None,
         image_contrast: float_range[0., 2., 0.1] | None = None,
@@ -53,6 +54,7 @@ class SettingsViewModel(QObject):
 
         self._geometry = geometry
         self._windowState = windowState
+        self._content_shortcuts_visible = content_shortcuts_visible
 
         self._image_brightness = image_brightness
         self._image_contrast = image_contrast
@@ -97,9 +99,13 @@ class SettingsViewModel(QObject):
         def copy_float_range(val):
             return type(val)(val) if val is not None else None
 
+        def copy_boolean(val):
+            return bool(val) if val is not None else None
+
         return SettingsViewModel(
             geometry=copy_q_bytearray(self.geometry),
             windowState=copy_q_bytearray(self.windowState),
+            content_shortcuts_visible=copy_boolean(self.content_shortcuts_visible),
 
             image_brightness=copy_float_range(self.image_brightness),
             image_contrast=copy_float_range(self.image_contrast),
@@ -140,6 +146,16 @@ class SettingsViewModel(QObject):
     def windowState(self, value: QByteArray) -> None:
         if self._windowState != value:
             self._windowState = value
+            self.qt_window_settings_changed.emit()
+
+    @property
+    def content_shortcuts_visible(self) -> bool:
+        return self._content_shortcuts_visible
+
+    @content_shortcuts_visible.setter
+    def content_shortcuts_visible(self, value: bool) -> None:
+        if self._content_shortcuts_visible != value:
+            self._content_shortcuts_visible = value
             self.qt_window_settings_changed.emit()
 
     # --- Image Settings ---

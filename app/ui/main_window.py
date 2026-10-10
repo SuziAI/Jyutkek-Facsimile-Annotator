@@ -716,15 +716,19 @@ class MainWindow(QMainWindow):
     def _save_window_settings(self):
         self._settings_vm.geometry = self.saveGeometry()
         self._settings_vm.windowState = self.saveState()
+        self._settings_vm.content_shortcuts_visible = self._content_editor.shortcuts_visible
 
     def _restore_window_settings(self):
         geometry = self._settings_vm.geometry
         window_state = self._settings_vm.windowState
+        content_shortcuts_visible = self._settings_vm.content_shortcuts_visible
 
         if geometry is not None:
             self.restoreGeometry(geometry)
         if window_state is not None:
             self.restoreState(window_state)
+        if content_shortcuts_visible is not None:
+            self._content_editor.shortcuts_visible = content_shortcuts_visible
 
     def _open_settings_dialog(self):
         dialog_change_settings = DialogChangeSettings(self._settings_service, self._settings_vm)

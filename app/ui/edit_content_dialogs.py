@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QKeyEvent
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QLabel, QHBoxLayout, QPushButton, \
     QComboBox, QGroupBox, QTextEdit, QTableWidget, QTableWidgetItem, QHeaderView, QGridLayout
 from PySide6.QtCore import Qt
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
 )
-from typing import get_args
+from typing import get_args, override
 
 from app.models.document import Beat, Pitch
 from app.services.document_service import DocumentService
@@ -30,6 +30,202 @@ from app.viewmodels.zone_viewmodel import ZoneViewModel
 
 BEAT_CHOICES: tuple[str, ...] = get_args(Beat)
 PITCH_CHOICES: tuple[str, ...] = get_args(Pitch)
+
+PUNCTUATION_CHARS = set("。，“”、…？！：；—,.!?;:")
+
+
+def group_lyrics_with_punctuation(lyrics: str) -> tuple[str, ...]:
+    """
+    Groups a lyrics string into units where punctuation characters are
+    attached to the preceding character, e.g.:
+
+        "我爱你，爸爸。" -> ("我", "爱", "你，", "爸。")
+
+    Punctuation is defined in PUNCTUATION_CHARS.
+    """
+    units: list[str] = []
+    current: str | None = None
+
+    for ch in lyrics:
+        if ch in PUNCTUATION_CHARS:
+            # Append punctuation to the current unit if there is one
+            if current is not None:
+                current += ch
+            else:
+                # If punctuation starts the string (rare), treat as its own unit
+                current = ch
+        else:
+            # Non-punctuation: start a new unit
+            if current is not None:
+                units.append(current)
+            current = ch
+
+    # Flush last unit
+    if current is not None:
+        units.append(current)
+
+    return tuple(units)
+
+
+class DialogMultipleCells(QDialog):
+    """
+    Dialog for adding multiple CellBlocks at once.
+
+    It offers two modes:
+        1) Lyrics mode: user enters a text; each character becomes one cell.
+        2) Count mode: user enters a number; that many empty cells are created.
+
+    Only one mode is active at a time:
+        - When lyrics text is non-empty, the number field is disabled.
+        - When number > 0, the lyrics box is cleared and disabled.
+
+    On accept, `cell_contents` returns a tuple[str, ...]:
+        - Lyrics mode: each character in the text (one per cell).
+        - Count mode: N empty strings (""), where N is the entered number.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Add Multiple Cells")
+
+        self._cell_contents: tuple[str, ...] = ()
+
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+        layout.addLayout(form)
+
+        # Lyrics input
+        self._lyrics_edit = QLineEdit(self)
+        self._lyrics_edit.setPlaceholderText("Enter lyrics (one character per cell)")
+        form.addRow(QLabel("Lyrics:", self), self._lyrics_edit)
+
+        # Number of cells input
+        self._count_edit = QLineEdit(self)
+        self._count_edit.setPlaceholderText("Enter number of empty cells")
+        form.addRow(QLabel("Number of cells:", self), self._count_edit)
+
+        # Connect signals to enforce mutual exclusivity
+        self._lyrics_edit.textChanged.connect(self._on_lyrics_changed)
+        self._count_edit.textChanged.connect(self._on_count_changed)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        ok_btn = QPushButton("OK", self)
+        cancel_btn = QPushButton("Cancel", self)
+        ok_btn.clicked.connect(self._on_accept)
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addStretch(1)
+        button_layout.addWidget(ok_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        self._update_enabled_state()
+
+    @property
+    def cell_contents(self) -> tuple[str, ...]:
+        """
+        Returns the tuple of strings representing the requested cells.
+
+        - Lyrics mode: one character per entry, e.g. ("我", "要", "唱").
+        - Count mode: N entries of "", e.g. ("", "", "", "").
+        """
+        return self._cell_contents
+
+    # --- Internal helpers ---
+
+    def _on_lyrics_changed(self, text: str) -> None:
+        """
+        Called when the lyrics text changes.
+        If lyrics is non-empty, disable the count field.
+        """
+        text = text or ""
+        if text:
+            # Disable count, clear it
+            self._count_edit.blockSignals(True)
+            self._count_edit.clear()
+            self._count_edit.blockSignals(False)
+        self._update_enabled_state()
+
+    def _on_count_changed(self, text: str) -> None:
+        """
+        Called when the count text changes.
+        If count > 0, disable the lyrics field.
+        """
+        text = text.strip()
+        # Basic validation: only treat as count if it's a positive integer
+        count_valid = False
+        if text:
+            try:
+                n = int(text)
+                count_valid = n > 0
+            except ValueError:
+                count_valid = False
+
+        if count_valid:
+            # Disable lyrics, clear it
+            self._lyrics_edit.blockSignals(True)
+            self._lyrics_edit.clear()
+            self._lyrics_edit.blockSignals(False)
+
+        self._update_enabled_state()
+
+    def _update_enabled_state(self) -> None:
+        """
+        Updates enabled/disabled state of the two inputs based on current content.
+        """
+        lyrics = self._lyrics_edit.text() or ""
+        count_text = self._count_edit.text().strip()
+
+        # Check if count is valid
+        count_valid = False
+        if count_text:
+            try:
+                n = int(count_text)
+                count_valid = n > 0
+            except ValueError:
+                count_valid = False
+
+        if lyrics:
+            # Lyrics mode active
+            self._lyrics_edit.setEnabled(True)
+            self._count_edit.setEnabled(False)
+        elif count_valid:
+            # Count mode active
+            self._lyrics_edit.setEnabled(False)
+            self._count_edit.setEnabled(True)
+        else:
+            # Neither active yet: both enabled to allow input
+            self._lyrics_edit.setEnabled(True)
+            self._count_edit.setEnabled(True)
+
+    def _on_accept(self) -> None:
+        """
+        Builds `self._cell_contents` according to the current mode and closes if valid.
+        """
+        lyrics = (self._lyrics_edit.text() or "").strip()
+        count_text = self._count_edit.text().strip()
+
+        # Lyrics mode
+        if lyrics:
+            # Group punctuation with preceding characters
+            self._cell_contents = group_lyrics_with_punctuation(lyrics)
+            self.accept()
+            return
+
+        # Count mode
+        if count_text:
+            try:
+                n = int(count_text)
+            except ValueError:
+                n = 0
+        else:
+            n = 0
+
+        if n > 0:
+            self._cell_contents = tuple("" for _ in range(n))
+            self.accept()
+            return
 
 
 class DialogSelectBlockType(QDialog):
@@ -222,7 +418,7 @@ class CellBlockDialog(QDialog):
         if syl_con or syl_content:
             if self._cell_vm.syl is None:
                 self._cell_vm.syl = SylCellViewModel(parent=self._cell_vm)
-            self._cell_vm.syl.con = syl_con
+            self._cell_vm.syl.con = syl_con if syl_con != "" else None
             self._cell_vm.syl.content = syl_content
         else:
             self._cell_vm.syl = None
@@ -266,13 +462,23 @@ class ZoneContentEditor(QWidget):
         # main layout
         main_layout = QVBoxLayout(self)
 
-        # --- Content type selection ---
+        # --- Content type selection + tools toggle ---
         type_layout = QHBoxLayout()
+
         type_layout.addWidget(QLabel("Content type:", self))
+
         self._type_combo = QComboBox(self)
         self._type_combo.addItems(["None", "Metadata", "Recitativo", "Qupai"])
         self._type_combo.currentIndexChanged.connect(self._content_type_changed)
         type_layout.addWidget(self._type_combo)
+
+        # Toggle button for shortcuts/tools panel
+        self._toggle_tools_btn = QPushButton("Show Shortcuts", self)
+        self._toggle_tools_btn.setCheckable(True)
+        self._toggle_tools_btn.setToolTip("Show/hide the shortcut tools panel")
+        self._toggle_tools_btn.clicked.connect(self._toggle_tools_visibility)
+        type_layout.addWidget(self._toggle_tools_btn)
+
         type_layout.addStretch(1)
         main_layout.addLayout(type_layout)
 
@@ -343,8 +549,8 @@ class ZoneContentEditor(QWidget):
         content_layout.addWidget(block_group, stretch=3)
 
         # Right: Tools panel
-        tools_group = QGroupBox("Shortcuts", self)
-        self._tools_layout = QVBoxLayout(tools_group)
+        self._tools_group = QGroupBox("Shortcuts", self)
+        self._tools_layout = QVBoxLayout(self._tools_group)
 
         # Build all tool groups
         self._build_recitativo_direction_tools()
@@ -356,14 +562,36 @@ class ZoneContentEditor(QWidget):
         self._build_qupai_prolongation_tools()
 
         self._tools_layout.addStretch(1)
-        tools_group.setLayout(self._tools_layout)
-        content_layout.addWidget(tools_group, stretch=2)
+        self._tools_group.setLayout(self._tools_layout)
+        content_layout.addWidget(self._tools_group, stretch=2)
 
         self._update_enabled_state()
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Delete:
+            # Only delete if a block is selected and the block list has focus
+            if self._block_list.hasFocus() and self._remove_block_btn.isEnabled():
+                self._remove_block()
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    @property
+    def shortcuts_visible(self) -> bool:
+        return self._toggle_tools_btn.isChecked()
+
+    @shortcuts_visible.setter
+    def shortcuts_visible(self, value: bool) -> None:
+        self._toggle_tools_btn.setChecked(value)
+        self._toggle_tools_btn.setText("Hide Shortcuts" if value else "Show Shortcuts")
+        self._toggle_tools_btn.setIcon(
+            QIcon.fromTheme(QIcon.ThemeIcon.GoPrevious) if value else QIcon.fromTheme(QIcon.ThemeIcon.GoNext)
+        )
+        self._tools_group.setVisible(value)
 
     def set_zone(self, zone: ZoneViewModel | None) -> None:
         """
@@ -447,7 +675,7 @@ class ZoneContentEditor(QWidget):
                 parts.append(f'type="{block.beat.beat}"')
             if block.gongche is not None:
                 parts.append(f'pname="{block.gongche.pname}"')
-            if block.syl is not None:
+            if block.syl is not None and block.syl.con is not None:
                 parts.append(f'con="{block.syl.con}"')
             attr = ", ".join(parts) if parts else ""
 
@@ -555,11 +783,11 @@ class ZoneContentEditor(QWidget):
 
         self._block_list.setEnabled(has_body)
         self._add_block_btn.setEnabled(has_body)
-        self._remove_block_btn.setEnabled(has_body)
 
         selected_index = self._document_vm.selected_block_index
         block_selected = has_body and selected_index is not None
 
+        self._remove_block_btn.setEnabled(block_selected)
         self._edit_block_btn.setEnabled(block_selected)
         self._move_block_up_button.setEnabled(block_selected)
         self._move_block_down_button.setEnabled(block_selected)
@@ -654,7 +882,7 @@ class ZoneContentEditor(QWidget):
         elif isinstance(body, BodyRecitativoViewModel):
             choices = ["RoleAnnot", "Direction", "Line"]
         elif isinstance(body, BodyQupaiViewModel):
-            choices = ["RoleAnnot", "Direction", "CellBlock"]
+            choices = ["RoleAnnot", "Direction", "Cell", "Multiple Cells..."]
         else:
             return
 
@@ -687,8 +915,35 @@ class ZoneContentEditor(QWidget):
                 new_block = RoleAnnotBlockViewModel(parent=body)
             elif selected == "Direction":
                 new_block = DirectionBlockViewModel(parent=body)
-            elif selected == "CellBlock":
+            elif selected == "Cell":
                 new_block = CellBlockViewModel(parent=body)
+            elif selected == "Multiple Cells...":
+                dlg = DialogMultipleCells(parent=self)
+                if dlg.exec() != QDialog.DialogCode.Accepted:
+                    return
+
+                contents = dlg.cell_contents
+
+                surface_index = self._document_vm.current_page_index
+                zone_index = self._document_vm.selected_zone_index
+                if zone_index is None:
+                    return
+
+                zone_vm = self._document_vm.surfaces[surface_index].zones[zone_index]
+
+                for offset, text in enumerate(contents):
+                    cb = CellBlockViewModel(parent=body)
+                    if text:
+                        cb.syl = SylCellViewModel(parent=cb)
+                        cb.syl.content = text
+                        cb.syl.con = None
+                    self._document_service.add_block(
+                        surface_index=surface_index,
+                        zone_index=zone_index,
+                        block=cb,
+                    )
+
+                return
             else:
                 return
 
@@ -1296,3 +1551,19 @@ class ZoneContentEditor(QWidget):
             index,
             edited_block,
         )
+
+    def _toggle_tools_visibility(self) -> None:
+        """
+        Show or hide the tools (shortcuts) panel, controlled by the toggle button.
+        """
+        # Checked => show; unchecked => hide
+        visible = self._toggle_tools_btn.isChecked()
+
+        if visible:
+            self._tools_group.show()
+            self._toggle_tools_btn.setText("Hide Shortcuts")
+            self._toggle_tools_btn.setIcon(QIcon.fromTheme(QIcon.ThemeIcon.GoPrevious))
+        else:
+            self._tools_group.hide()
+            self._toggle_tools_btn.setText("Show Shortcuts")
+            self._toggle_tools_btn.setIcon(QIcon.fromTheme(QIcon.ThemeIcon.GoNext))
