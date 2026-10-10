@@ -295,7 +295,7 @@ class ZoneContentEditor(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Attributes
 
         self._block_list.cellDoubleClicked.connect(self._edit_block)
-        self._block_list.itemSelectionChanged.connect(self._block_selection_changed)
+        self._block_list.itemClicked.connect(self._block_selection_changed)
         block_layout.addWidget(self._block_list)
 
         # --- Button rows ---
@@ -471,6 +471,8 @@ class ZoneContentEditor(QWidget):
             attr_item = QTableWidgetItem(attr_str)
             self._block_list.setItem(row, 4, attr_item)
 
+        if self._document_vm.selected_block_index is not None:
+            self._block_list.selectRow(self._document_vm.selected_block_index)
         self._block_list.resizeRowsToContents()
 
     def _current_body(self) -> BodyMetadataViewModel | BodyRecitativoViewModel | BodyQupaiViewModel | None:
@@ -638,53 +640,28 @@ class ZoneContentEditor(QWidget):
         """
         Moves the currently selected block one position up.
         """
-        body = self._current_body()
-        if body is None:
-            return
 
-        selected_block = self._document_vm.selected_block_index
-        if selected_block is None:  # nothing selected or already at top
-            return
-
-        blocks = list(body.content)
-        if selected_block >= len(blocks):
-            return
-
-        # swap row with row-1
-        blocks[selected_block - 1], blocks[selected_block] = blocks[selected_block], blocks[selected_block - 1]
-
-        # write back and repopulate
-        self._set_body_content(tuple(blocks))
-        self._populate_block_list()
-
-        # restore selection on the new row
-        self._block_list.selectRow(selected_block - 1)
+    def _move_block_up(self) -> None:
+        """
+        Moves the currently selected block one position up.
+        """
+        self._document_service.change_block_order(
+            self._document_vm.current_page_index,
+            self._document_vm.selected_zone_index,
+            self._document_vm.selected_block_index,
+            self._document_vm.selected_block_index - 1,
+        )
 
     def _move_block_down(self) -> None:
         """
         Moves the currently selected block one position down.
         """
-        body = self._current_body()
-        if body is None:
-            return
-
-        selected_block = self._document_vm.selected_block_index
-        if selected_block is None:
-            return
-
-        blocks = list(body.content)
-        if selected_block >= len(blocks) - 1:  # already at the bottom
-            return
-
-        # swap row with row+1
-        blocks[selected_block], blocks[selected_block + 1] = blocks[selected_block + 1], blocks[selected_block]
-
-        # write back and repopulate
-        self._set_body_content(tuple(blocks))
-        self._populate_block_list()
-
-        # restore selection on the new row
-        self._block_list.selectRow(selected_block + 1)
+        self._document_service.change_block_order(
+            self._document_vm.current_page_index,
+            self._document_vm.selected_zone_index,
+            self._document_vm.selected_block_index,
+            self._document_vm.selected_block_index + 1,
+        )
 
     def _edit_block(self, row: int, _column: int) -> None:
         """

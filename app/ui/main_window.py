@@ -511,8 +511,7 @@ class MainWindow(QMainWindow):
         )
 
     def _document_type_changed(self, value: str) -> None:
-        if value in ("MEI"):
-            self._document_service.set_document_type(value)
+        self._document_service.set_document_type("MEI")
 
     def _sync_document_type_combo(self, *_args) -> None:
         self._document_type_combo.blockSignals(True)

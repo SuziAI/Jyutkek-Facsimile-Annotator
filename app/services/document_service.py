@@ -10,7 +10,7 @@ from app.repositories.document_repository import DocumentRepository
 from app.repositories.text_repository import TextRepository
 from app.services.command_service import Command, AddZoneCommand, RemoveZoneCommand, UpdateZoneRectCommand, \
     SetDocumentTypeCommand, GoToPageCommand, AddSurfacesCommand, RemoveSurfaceCommand, ChangeZoneOrderCommand, \
-    AddBlockCommand, RemoveBlockCommand
+    AddBlockCommand, RemoveBlockCommand, ChangeBlockOrderCommand
 from app.services.mapping_service import document_to_viewmodel, viewmodel_to_document
 from app.services.xml_export_service import viewmodel_to_xml
 from app.viewmodels.content_block_viewmodel import ContentBlockViewModel
@@ -98,6 +98,9 @@ class DocumentService(QObject):
         select_zone (int): Marks a zone in the document as selected.
         select_block (int): Marks a zone content block in the document as selected.
         set_document_type (Literal["TEI", "MEI"]): Sets the document type.
+        add_block (int, int, ContentBlockViewModel): Adds a zone content block to the document.
+        remove_block (int, int, int): Removes a zone content block from the document.
+        change_block_order (int, int, int): Changes the zone content block order in the document.
     """
     open_succeeded = Signal()
     save_succeeded = Signal()
@@ -340,6 +343,13 @@ class DocumentService(QObject):
         self.do_command(cmd)
 
     def add_block(self, surface_index: int, zone_index: int, block: ContentBlockViewModel) -> None:
+        """
+        Adds a zone content block.
+
+        :param surface_index: Index of surface.
+        :param zone_index: Index of zone.
+        :param block: Content block to be added to the zone.
+        """
         cmd = AddBlockCommand(
             document_vm=self._document_vm,
             surface_index=surface_index,
@@ -349,12 +359,31 @@ class DocumentService(QObject):
         self.do_command(cmd)
 
     def remove_block(self, surface_index: int, zone_index: int, block_index: int) -> None:
+        """
+        Removes a zone content block.
+
+        :param surface_index: Index of surface.
+        :param zone_index: Index of zone.
+        :param block_index: Index of block to be removed.
+        """
         cmd = RemoveBlockCommand(
             document_vm=self._document_vm,
             surface_index=surface_index,
             zone_index=zone_index,
             block_index=block_index,
         )
+        self.do_command(cmd)
+
+    def change_block_order(self, surface_index: int, zone_index: int, block_index: int, target_index: int) -> None:
+        """
+        Changes the zone order in the document.
+
+        :param surface_index: Index of surface which contains the zone to be removed.
+        :param zone_index: Index of zone.
+        :param block_index: Index of block to be moved.
+        :param target_index: New index of block.
+        """
+        cmd = ChangeBlockOrderCommand(self._document_vm, surface_index, zone_index, block_index, target_index)
         self.do_command(cmd)
 
     def _emit_undo_redo_changed(self):
