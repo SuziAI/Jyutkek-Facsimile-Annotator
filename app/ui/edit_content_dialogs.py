@@ -929,8 +929,6 @@ class ZoneContentEditor(QWidget):
                 if zone_index is None:
                     return
 
-                zone_vm = self._document_vm.surfaces[surface_index].zones[zone_index]
-
                 for offset, text in enumerate(contents):
                     cb = CellBlockViewModel(parent=body)
                     if text:
@@ -953,6 +951,7 @@ class ZoneContentEditor(QWidget):
         self._document_service.add_block(
             surface_index=surface_index,
             zone_index=zone_index,
+            insert_index=self._document_vm.selected_block_index+1,
             block=new_block,
         )
 
@@ -1140,7 +1139,7 @@ class ZoneContentEditor(QWidget):
     # ------------------------------------------------------------------
 
     def _build_qupai_cell_tools(self) -> None:
-        gongche_group = QGroupBox("Qupai (Pitch)", self)
+        gongche_group = QGroupBox("Qupai (Cell Pitch)", self)
         grid = QGridLayout(gongche_group)
 
         rows = [
@@ -1193,7 +1192,7 @@ class ZoneContentEditor(QWidget):
         self._tools_layout.addWidget(gongche_group)
 
     def _build_qupai_beat_tools(self) -> None:
-        beat_group = QGroupBox("Qupai (Beat)", self)
+        beat_group = QGroupBox("Qupai (Cell Beat)", self)
         layout = QHBoxLayout(beat_group)
 
         specs = [
@@ -1218,7 +1217,7 @@ class ZoneContentEditor(QWidget):
         self._tools_layout.addWidget(beat_group)
 
     def _build_qupai_prolongation_tools(self) -> None:
-        pd_group = QGroupBox("Qupai (Prolongation Dot)", self)
+        pd_group = QGroupBox("Qupai (Cell Prolongation Dot)", self)
         layout = QHBoxLayout(pd_group)
 
         self._btn_no_dot = QPushButton("No Dot", self)

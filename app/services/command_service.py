@@ -450,18 +450,25 @@ class AddBlockCommand(Command):
     Adds a zone content block.
     """
     def __init__(self, document_vm: DocumentViewModel, surface_index: int,
-                 zone_index: int, block: ContentBlockViewModel):
+                 zone_index: int, insert_index: int, block: ContentBlockViewModel):
         """
         :param document_vm: Document viewmodel.
         :param surface_index: Surface index.
         :param zone_index: Zone index.
+        :param insert_index: Index where the new block should be added.
         :param block: Block to add.
         """
         self._document_vm = document_vm
         self._surface_index = surface_index
         self._zone_index = zone_index
+        self._insert_index = insert_index
         self._block = block
-        self._old_content: tuple[ContentBlockViewModel, ...] | None = None
+
+        surface = self._document_vm.surfaces[self._surface_index]
+        zone = surface.zones[self._zone_index]
+
+        if self._insert_index > len(zone.content.content):  # if insert index is invalid, take last valid index
+            self._insert_index = len(zone.content.content)
 
     def name(self):
         return "Add Zone Content Block"
@@ -471,9 +478,8 @@ class AddBlockCommand(Command):
         zone = surface.zones[self._zone_index]
         body = zone.content
 
-        self._old_content = body.content
         new_content = list(body.content)
-        new_content.append(self._block)
+        new_content.insert(self._insert_index, self._block)
         body.content = tuple(new_content)
 
         self._document_vm.dirty = True
@@ -483,8 +489,9 @@ class AddBlockCommand(Command):
         zone = surface.zones[self._zone_index]
         body = zone.content
 
-        if self._old_content is not None:
-            body.content = self._old_content
+        old_content = list(body.content)
+        old_content.pop(self._insert_index)
+        body.content = tuple(old_content)
 
         self._document_vm.dirty = True
 

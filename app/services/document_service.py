@@ -98,7 +98,7 @@ class DocumentService(QObject):
         select_zone (int): Marks a zone in the document as selected.
         select_block (int): Marks a zone content block in the document as selected.
         set_document_type (Literal["TEI", "MEI"]): Sets the document type.
-        add_block (int, int, ContentBlockViewModel): Adds a zone content block to the document.
+        add_block (int, int, int, ContentBlockViewModel): Adds a zone content block to the document.
         remove_block (int, int, int): Removes a zone content block from the document.
         edit_block (int, int, int, ContentBlockViewModel): Edit a zone content block from the document.
         change_block_order (int, int, int): Changes the zone content block order in the document.
@@ -343,18 +343,20 @@ class DocumentService(QObject):
         cmd = SetDocumentTypeCommand(self._document_vm, doc_type)
         self.do_command(cmd)
 
-    def add_block(self, surface_index: int, zone_index: int, block: ContentBlockViewModel) -> None:
+    def add_block(self, surface_index: int, zone_index: int, insert_index: int, block: ContentBlockViewModel) -> None:
         """
         Adds a zone content block.
 
         :param surface_index: Index of surface.
         :param zone_index: Index of zone.
+        :param insert_index: Index where the new block should be added.
         :param block: Content block to be added to the zone.
         """
         cmd = AddBlockCommand(
             document_vm=self._document_vm,
             surface_index=surface_index,
             zone_index=zone_index,
+            insert_index=insert_index,
             block=block,
         )
         self.do_command(cmd)
