@@ -144,6 +144,8 @@ class DisplaySettings:
         selected_zone_border_color (QColor): The color of the border of a selected zone.
         selected_zone_fill_color (QColor): The color of the fill of a selected zone.
         selected_zone_fill_opacity (int_range): The opacity of the fill of a selected zone.
+
+        not_approved_cell_color (QColor): The color of a content block that is marked as 'not approved'.
     """
     canvas_background_color: QColor = field(default_factory=lambda: QColor("#e6e6e6"))
 
@@ -161,5 +163,7 @@ class DisplaySettings:
     selected_zone_border_color: QColor = field(default_factory=lambda: QColor("#0b63ce"))
     selected_zone_fill_color: QColor = field(default_factory=lambda: QColor("#3584e4"))
     selected_zone_fill_opacity: int_range[0, 255] = 85
+
+    not_approved_block_color: QColor = field(default_factory=lambda: QColor("#ffffcc"))
 
 

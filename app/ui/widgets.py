@@ -1,9 +1,9 @@
 from typing import override
 
 from PySide6.QtCore import QEvent, QTimer, Signal, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QKeyEvent
 from PySide6.QtWidgets import QLineEdit, QWidget, QLabel, QMenu, QToolTip, QColorDialog, QSlider, QVBoxLayout, \
-    QPushButton, QHBoxLayout
+    QPushButton, QHBoxLayout, QComboBox
 
 from app.models.settings import int_range, float_range
 
@@ -458,3 +458,12 @@ class LabeledSlider(QWidget):
         self._label_min.setText(f"{self.slider.minimum()}")
         self._label_max.setText(f"{self.slider.maximum()}")
         self._label_value.setText(f"{self.slider.value()}")
+
+
+class NoKeyComboBox(QComboBox):
+    """
+    Class NoKeyComboBox is a combo box that will never take keyboard events.
+    """
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        # Ignore all key events
+        event.ignore()

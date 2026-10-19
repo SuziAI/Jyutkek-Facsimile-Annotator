@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtGui import QIcon, QKeyEvent
+from PySide6.QtGui import QIcon, QKeyEvent, QColor
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QLabel, QHBoxLayout, QPushButton, \
     QComboBox, QGroupBox, QTextEdit, QTableWidget, QTableWidgetItem, QHeaderView, QGridLayout
 from PySide6.QtCore import Qt
@@ -19,13 +19,14 @@ from app.services.mapping_service import viewmodel_to_cell_block, cell_block_to_
     line_block_to_viewmodel, viewmodel_to_title_block, title_block_to_viewmodel, viewmodel_to_paragraph_block, \
     paragraph_block_to_viewmodel, viewmodel_to_role_annot_block, role_annot_block_to_viewmodel, \
     viewmodel_to_direction_block, direction_block_to_viewmodel
-from app.ui.widgets import VerticalTextWidget
+from app.ui.widgets import VerticalTextWidget, NoKeyComboBox
 from app.viewmodels.content_block_viewmodel import CellBlockViewModel, TitleBlockViewModel, ParagraphBlockViewModel, \
     RoleAnnotBlockViewModel, DirectionBlockViewModel, LineBlockViewModel
 from app.viewmodels.content_cell_viewmodel import BeatCellViewModel, SylCellViewModel, ProlongationDotCellViewModel, \
     GongcheCellViewModel
 from app.viewmodels.content_viewmodel import BodyMetadataViewModel, BodyQupaiViewModel, BodyRecitativoViewModel
 from app.viewmodels.document_viewmodel import DocumentViewModel
+from app.viewmodels.settings_viewmodel import SettingsViewModel
 from app.viewmodels.zone_viewmodel import ZoneViewModel
 
 BEAT_CHOICES: tuple[str, ...] = get_args(Beat)
@@ -327,6 +328,10 @@ class CellBlockDialog(QDialog):
         self._pd_content = QLineEdit(self)
         form.addRow(QLabel("ProlongationDot Content:", self), self._pd_content)
 
+        # --- Approval note ---
+        self._approval_note_edit = QLineEdit(self)
+        form.addRow(QLabel("Note:", self), self._approval_note_edit)
+
         # Buttons
         button_box = QHBoxLayout()
         ok_btn = QPushButton("OK", self)
@@ -386,6 +391,9 @@ class CellBlockDialog(QDialog):
         else:
             self._pd_content.clear()
 
+        # Approval note
+        self._approval_note_edit.setText(self._cell_vm.approval_note)
+
     def accept(self) -> None:
         """
         Writes the dialog values back into the CellBlockViewModel and closes the dialog.
@@ -432,6 +440,15 @@ class CellBlockDialog(QDialog):
         else:
             self._cell_vm.prolongation_dot = None
 
+        # Approval state and note
+        note_text = (self._approval_note_edit.text() or "").strip()
+        if note_text:
+            self._cell_vm.approval_state = "pending"
+            self._cell_vm.approval_note = note_text
+        else:
+            self._cell_vm.approval_state = "approved"
+            self._cell_vm.approval_note = ""
+
         super().accept()
 
 
@@ -449,10 +466,12 @@ class ZoneContentEditor(QWidget):
     def __init__(self,
                  document_vm: DocumentViewModel,
                  document_service: DocumentService,
+                 settings_vm: SettingsViewModel,
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._document_vm = document_vm
         self._document_service = document_service
+        self._settings_vm = settings_vm
         self._zone: ZoneViewModel | None = None
 
         self._document_service.undo_redo_changed.connect(self._populate_block_list)
@@ -467,7 +486,7 @@ class ZoneContentEditor(QWidget):
 
         type_layout.addWidget(QLabel("Content type:", self))
 
-        self._type_combo = QComboBox(self)
+        self._type_combo = NoKeyComboBox(self)
         self._type_combo.addItems(["None", "Metadata", "Recitativo", "Qupai"])
         self._type_combo.currentIndexChanged.connect(self._content_type_changed)
         type_layout.addWidget(self._type_combo)
@@ -572,10 +591,35 @@ class ZoneContentEditor(QWidget):
     # ------------------------------------------------------------------
     @override
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        def _has_any_focus() -> bool:
+            # True if either the ZoneContentEditor itself or any of its children
+            # currently has focus.
+            return self.hasFocus() or self.isAncestorOf(self.focusWidget())
+
         if event.key() == Qt.Key.Key_Delete:
             # Only delete if a block is selected and the block list has focus
-            if self._block_list.hasFocus() and self._remove_block_btn.isEnabled():
+            if _has_any_focus and self._remove_block_btn.isEnabled():
                 self._remove_block()
+                event.accept()
+                return
+        if event.key() == Qt.Key.Key_Up:
+            # Only go up if a block is selected and the block list has focus
+            if _has_any_focus and self._remove_block_btn.isEnabled():
+                try:
+                    self._document_service.select_block(self._document_vm.selected_block_index - 1)
+                    self._update_selection()
+                except IndexError:
+                    pass
+                event.accept()
+                return
+        if event.key() == Qt.Key.Key_Down:
+            # Only go down if a block is selected and the block list has focus
+            if _has_any_focus and self._remove_block_btn.isEnabled():
+                try:
+                    self._document_service.select_block(self._document_vm.selected_block_index + 1)
+                    self._update_selection()
+                except IndexError:
+                    pass
                 event.accept()
                 return
         super().keyPressEvent(event)
@@ -639,27 +683,40 @@ class ZoneContentEditor(QWidget):
         """
         # Title
         if isinstance(block, TitleBlockViewModel):
-            return "Title", None, block.title, None, ""
+            attr = f"NOTE={block.approval_note}" if block.approval_note else ""
+            return "Title", None, block.title, None, attr
 
         # Paragraph
         if isinstance(block, ParagraphBlockViewModel):
-            return "Paragraph", None, block.paragraph, None, ""
+            attr = f"NOTE={block.approval_note}" if block.approval_note else ""
+            return "Paragraph", None, block.paragraph, None, attr
 
         # Role annotation
         if isinstance(block, RoleAnnotBlockViewModel):
             roles = " ".join(block.plist) if block.plist else ""
-            attr = f"plist={roles}" if roles else ""
+            parts = []
+            if roles:
+                parts.append(f'plist="{roles}"')
+            if block.approval_note:
+                parts.append(f'NOTE="{block.approval_note}"')
+            attr = ", ".join(parts) if parts else ""
             return "Role", None, block.content, None, attr
 
         # Direction
         if isinstance(block, DirectionBlockViewModel):
             plist = " ".join(block.plist) if block.plist else ""
-            attr = f"plist={plist}" if plist else ""
+            parts = []
+            if plist:
+                parts.append(f'plist="{plist}"')
+            if block.approval_note:
+                parts.append(f'NOTE="{block.approval_note}"')
+            attr = ", ".join(parts) if parts else ""
             return "Direction", None, f"▲{block.content}▼", None, attr
 
         # Line
         if isinstance(block, LineBlockViewModel):
-            return "Line", None, block.content, None, ""
+            attr = f"NOTE={block.approval_note}" if block.approval_note else ""
+            return "Line", None, block.content, None, attr
 
         # CellBlock
         if isinstance(block, CellBlockViewModel):
@@ -677,6 +734,8 @@ class ZoneContentEditor(QWidget):
                 parts.append(f'pname="{block.gongche.pname}"')
             if block.syl is not None and block.syl.con is not None:
                 parts.append(f'con="{block.syl.con}"')
+            if block.approval_note:
+                parts.append(f'NOTE="{block.approval_note}"')
             attr = ", ".join(parts) if parts else ""
 
             return "Cell", text_display, gongche_display, beat_display, attr
@@ -721,9 +780,31 @@ class ZoneContentEditor(QWidget):
             attr_item = QTableWidgetItem(attr_str)
             self._block_list.setItem(row, 4, attr_item)
 
+            # Highlight row if approval_state != "approved"
+            approval_state = block.approval_state
+            if approval_state != "approved":
+                for col in range(self._block_list.columnCount()):
+                    item = self._block_list.item(row, col)
+                    if item is not None:
+                        item.setBackground(self._settings_vm.not_approved_block_color)
+
+                # also color the VerticalTextWidget background (column 2)
+                widget = self._block_list.cellWidget(row, 2)
+                if widget is not None:
+                    pal = widget.palette()
+                    pal.setColor(widget.backgroundRole(), self._settings_vm.not_approved_block_color)
+                    widget.setAutoFillBackground(True)
+                    widget.setPalette(pal)
+
+            self._update_selection()
+        self._block_list.resizeRowsToContents()
+
+    def _update_selection(self):
+        """
+        Updates the _block_list selection according to the currently selected block index.
+        """
         if self._document_vm.selected_block_index is not None:
             self._block_list.selectRow(self._document_vm.selected_block_index)
-        self._block_list.resizeRowsToContents()
 
     def _current_body(self) -> BodyMetadataViewModel | BodyRecitativoViewModel | BodyQupaiViewModel | None:
         """
@@ -929,6 +1010,7 @@ class ZoneContentEditor(QWidget):
                 if zone_index is None:
                     return
 
+                # TODO: Make one big command for this that can be done/undone instead of one command per letter?
                 for offset, text in enumerate(contents):
                     cb = CellBlockViewModel(parent=body)
                     if text:
@@ -938,6 +1020,7 @@ class ZoneContentEditor(QWidget):
                     self._document_service.add_block(
                         surface_index=surface_index,
                         zone_index=zone_index,
+                        insert_index=self._document_vm.selected_block_index + 1,
                         block=cb,
                     )
 
@@ -951,7 +1034,7 @@ class ZoneContentEditor(QWidget):
         self._document_service.add_block(
             surface_index=surface_index,
             zone_index=zone_index,
-            insert_index=self._document_vm.selected_block_index+1,
+            insert_index=self._document_vm.selected_block_index + 1,
             block=new_block,
         )
 
@@ -1077,12 +1160,14 @@ class ZoneContentEditor(QWidget):
         form = QFormLayout()
         layout.addLayout(form)
 
+        # Optional plist for RoleAnnot / Direction
         plist_edit: QLineEdit | None = None
         if isinstance(block, (RoleAnnotBlockViewModel, DirectionBlockViewModel)):
             plist_edit = QLineEdit(dialog)
             plist_edit.setText(", ".join(block.plist))
             form.addRow(QLabel("plist (comma-separated):", dialog), plist_edit)
 
+        # Main text
         text_edit = QTextEdit(dialog)
         if isinstance(block, TitleBlockViewModel):
             text_edit.setPlainText(block.title)
@@ -1092,6 +1177,19 @@ class ZoneContentEditor(QWidget):
             text_edit.setPlainText(block.content)
         form.addRow(QLabel("Text:", dialog), text_edit)
 
+        # --- Approval note ---
+        note_edit = QLineEdit(dialog)
+        note_edit.setPlaceholderText("Optional note for approval")
+        # All these block types mix in BlockApprovalMixin, so they have approval_note
+        if isinstance(block, (TitleBlockViewModel,
+                              ParagraphBlockViewModel,
+                              RoleAnnotBlockViewModel,
+                              DirectionBlockViewModel,
+                              LineBlockViewModel)):
+            note_edit.setText(block.approval_note or "")
+        form.addRow(QLabel("Note:", dialog), note_edit)
+
+        # Buttons
         button_box = QHBoxLayout()
         ok_btn = QPushButton("OK", dialog)
         cancel_btn = QPushButton("Cancel", dialog)
@@ -1105,10 +1203,12 @@ class ZoneContentEditor(QWidget):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return False
 
+        # plist
         if plist_edit is not None and isinstance(block, (RoleAnnotBlockViewModel, DirectionBlockViewModel)):
             raw = plist_edit.text()
             block.plist = tuple(s.strip() for s in raw.split(",") if s.strip())
 
+        # text
         text = text_edit.toPlainText()
         if isinstance(block, TitleBlockViewModel):
             block.title = text
@@ -1116,6 +1216,20 @@ class ZoneContentEditor(QWidget):
             block.paragraph = text
         elif isinstance(block, (RoleAnnotBlockViewModel, DirectionBlockViewModel, LineBlockViewModel)):
             block.content = text
+
+        # approval state / note
+        note_text = (note_edit.text() or "").strip()
+        if isinstance(block, (TitleBlockViewModel,
+                              ParagraphBlockViewModel,
+                              RoleAnnotBlockViewModel,
+                              DirectionBlockViewModel,
+                              LineBlockViewModel)):
+            if note_text:
+                block.approval_state = "pending"
+                block.approval_note = note_text
+            else:
+                block.approval_state = "approved"
+                block.approval_note = ""
 
         return True
 

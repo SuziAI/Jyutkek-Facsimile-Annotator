@@ -231,26 +231,31 @@ class DocumentRepository:
         Serializes any block type into a tagged dict.
         """
         if isinstance(block, TitleBlock):
-            return {"type": "title", "title": block.title}
+            return {"type": "title", "title": block.title,
+                    "approval_state": block.approval_state, "approval_note": block.approval_note}
 
         if isinstance(block, ParagraphBlock):
-            return {"type": "paragraph", "paragraph": block.paragraph}
+            return {"type": "paragraph", "paragraph": block.paragraph,
+                    "approval_state": block.approval_state, "approval_note": block.approval_note}
 
         if isinstance(block, RoleAnnotBlock):
             return {
                 "type": "role_annot",
                 "plist": list(block.plist),
                 "content": block.content,
+                "approval_state": block.approval_state, "approval_note": block.approval_note
             }
 
         if isinstance(block, LineBlock):
-            return {"type": "line", "content": block.content}
+            return {"type": "line", "content": block.content,
+                    "approval_state": block.approval_state, "approval_note": block.approval_note}
 
         if isinstance(block, DirectionBlock):
             return {
                 "type": "direction",
                 "plist": list(block.plist),
                 "content": block.content,
+                "approval_state": block.approval_state, "approval_note": block.approval_note
             }
 
         if isinstance(block, CellBlock):
@@ -262,6 +267,7 @@ class DocumentRepository:
                 "prolongation_dot": cls._prolongation_dot_cell_to_dict(
                     block.prolongation_dot
                 ),
+                "approval_state": block.approval_state, "approval_note": block.approval_note
             }
 
         raise TypeError(f"Unsupported block type: {type(block)!r}")
@@ -283,16 +289,26 @@ class DocumentRepository:
         type_ = data.get("type")
 
         if type_ == "title":
-            return TitleBlock(title=str(data["title"]))
+            return TitleBlock(
+                title=str(data["title"]),
+                approval_state=data.get("approval_state"),
+                approval_note=data.get("approval_note"),
+            )
 
         if type_ == "paragraph":
-            return ParagraphBlock(paragraph=str(data["paragraph"]))
+            return ParagraphBlock(
+                paragraph=str(data["paragraph"]),
+                approval_state=data.get("approval_state"),
+                approval_note=data.get("approval_note"),
+            )
 
         if type_ == "role_annot":
             plist = tuple(data.get("plist", []))  # type: ignore[assignment]
             return RoleAnnotBlock(
                 plist=plist,  # tuple[RoleAnnot]
                 content=str(data.get("content", "")),
+                approval_state=data.get("approval_state"),
+                approval_note=data.get("approval_note"),
             )
 
         if type_ == "line":
@@ -303,6 +319,8 @@ class DocumentRepository:
             return DirectionBlock(
                 plist=plist,  # tuple[Direction]
                 content=str(data.get("content", "")),
+                approval_state=data.get("approval_state"),
+                approval_note=data.get("approval_note"),
             )
 
         if type_ == "cell":
@@ -313,6 +331,8 @@ class DocumentRepository:
                 prolongation_dot=cls._prolongation_dot_cell_from_dict(
                     data.get("prolongation_dot")
                 ),
+                approval_state=data.get("approval_state"),
+                approval_note=data.get("approval_note"),
             )
 
         raise ValueError(f"Unknown block type: {type_!r}")

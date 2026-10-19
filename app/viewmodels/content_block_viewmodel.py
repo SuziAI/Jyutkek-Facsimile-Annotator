@@ -3,11 +3,46 @@ from typing import Union
 
 from PySide6.QtCore import QObject, Signal
 
+from app.models.document import Approval
 from app.viewmodels.content_cell_viewmodel import BeatCellViewModel, GongcheCellViewModel, SylCellViewModel, \
     ProlongationDotCellViewModel
 
 
-class TitleBlockViewModel(QObject):
+class BlockApprovalMixin:
+    """
+    Allows for different annotations regarding approval, e.g.,
+    if it has to be checked by another person.
+
+    Signals:
+        approval_changed (Signal(str, str)): Emitted when an approval is changed.
+    """
+    approval_changed = Signal(str, str)
+
+    def __init__(self, *args, approval_state: Approval = "approved", approval_note: str = "", **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._approval_state = approval_state
+        self._approval_note = approval_note
+
+    @property
+    def approval_state(self) -> Approval:
+        return self._approval_state
+
+    @approval_state.setter
+    def approval_state(self, value: Approval) -> None:
+        self._approval_state = value
+        self.approval_changed.emit(self._approval_state, self._approval_note)
+
+    @property
+    def approval_note(self) -> str:
+        return self._approval_note
+
+    @approval_note.setter
+    def approval_note(self, value: str) -> None:
+        self._approval_note = value
+        self.approval_changed.emit(self._approval_state, self._approval_note)
+
+
+class TitleBlockViewModel(QObject, BlockApprovalMixin):
     """
     TitleBlock viewmodel.
 
@@ -19,9 +54,11 @@ class TitleBlockViewModel(QObject):
     def __init__(
         self,
         title: str = "",
+        approval_state: Approval = "approved",
+        approval_note: str = "",
         parent: QObject | None = None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent=parent, approval_state=approval_state, approval_note=approval_note)
         self._title = title
 
     @property
@@ -34,7 +71,7 @@ class TitleBlockViewModel(QObject):
         self.title_changed.emit(value)
 
 
-class ParagraphBlockViewModel(QObject):
+class ParagraphBlockViewModel(QObject, BlockApprovalMixin):
     """
     ParagraphBlock viewmodel.
 
@@ -46,9 +83,11 @@ class ParagraphBlockViewModel(QObject):
     def __init__(
         self,
         paragraph: str = "",
+        approval_state: Approval = "approved",
+        approval_note: str = "",
         parent: QObject | None = None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent=parent, approval_state=approval_state, approval_note=approval_note)
         self._paragraph = paragraph
 
     @property
@@ -61,7 +100,7 @@ class ParagraphBlockViewModel(QObject):
         self.paragraph_changed.emit(value)
 
 
-class RoleAnnotBlockViewModel(QObject):
+class RoleAnnotBlockViewModel(QObject, BlockApprovalMixin):
     """
     RoleAnnotBlock viewmodel.
 
@@ -72,20 +111,22 @@ class RoleAnnotBlockViewModel(QObject):
 
     def __init__(
         self,
-        plist: (tuple[str]) = tuple([""]),
+        plist: tuple[str, ...] = ("", ),
         content: str = "",
+        approval_state: Approval = "approved",
+        approval_note: str = "",
         parent: QObject | None = None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent=parent, approval_state=approval_state, approval_note=approval_note)
         self._plist = plist
         self._content = content
 
     @property
-    def plist(self) -> tuple[str]:
+    def plist(self) -> tuple[str, ...]:
         return self._plist
 
     @plist.setter
-    def plist(self, value: tuple[str]) -> None:
+    def plist(self, value: tuple[str, ...]) -> None:
         self._plist = value
         self.role_annot_changed.emit()
 
@@ -99,7 +140,7 @@ class RoleAnnotBlockViewModel(QObject):
         self.role_annot_changed.emit()
 
 
-class LineBlockViewModel(QObject):
+class LineBlockViewModel(QObject, BlockApprovalMixin):
     """
     LineBlockViewModel viewmodel.
 
@@ -111,9 +152,11 @@ class LineBlockViewModel(QObject):
     def __init__(
         self,
         content: str = "",
+        approval_state: Approval = "approved",
+        approval_note: str = "",
         parent: QObject | None = None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent=parent, approval_state=approval_state, approval_note=approval_note)
         self._content = content
 
     @property
@@ -126,7 +169,7 @@ class LineBlockViewModel(QObject):
         self.content_changed.emit(value)
 
 
-class DirectionBlockViewModel(QObject):
+class DirectionBlockViewModel(QObject, BlockApprovalMixin):
     """
     DirectionBlock viewmodel.
 
@@ -137,20 +180,22 @@ class DirectionBlockViewModel(QObject):
 
     def __init__(
         self,
-        plist: (tuple[str]) = tuple([""]),
+        plist: tuple[str, ...] = ("", ),
         content: str = "",
+        approval_state: Approval = "approved",
+        approval_note: str = "",
         parent: QObject | None = None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent=parent, approval_state=approval_state, approval_note=approval_note)
         self._plist = plist
         self._content = content
 
     @property
-    def plist(self) -> tuple[str]:
+    def plist(self) -> tuple[str, ...]:
         return self._plist
 
     @plist.setter
-    def plist(self, value: tuple[str]) -> None:
+    def plist(self, value: tuple[str, ...]) -> None:
         self._plist = value
         self.direction_changed.emit()
 
@@ -164,7 +209,7 @@ class DirectionBlockViewModel(QObject):
         self.direction_changed.emit()
 
 
-class CellBlockViewModel(QObject):
+class CellBlockViewModel(QObject, BlockApprovalMixin):
     """
     CellBlock viewmodel.
 
@@ -179,9 +224,11 @@ class CellBlockViewModel(QObject):
         gongche: GongcheCellViewModel | None = None,
         syl: SylCellViewModel | None = None,
         prolongation_dot: ProlongationDotCellViewModel | None = None,
+        approval_state: Approval = "approved",
+        approval_note: str = "",
         parent: QObject | None = None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent=parent, approval_state=approval_state, approval_note=approval_note)
         self._beat = beat
         self._gongche = gongche
         self._syl = syl

@@ -45,6 +45,8 @@ class SettingsViewModel(QObject):
         selected_zone_fill_color: QColor | None = None,
         selected_zone_fill_opacity: int_range[0, 255] | None = None,
 
+        not_approved_block_color: QColor | None = None,
+
         parent: QObject | None = None,
     ) -> None:
         """
@@ -73,6 +75,8 @@ class SettingsViewModel(QObject):
         self._selected_zone_border_color = selected_zone_border_color
         self._selected_zone_fill_color = selected_zone_fill_color
         self._selected_zone_fill_opacity = selected_zone_fill_opacity
+
+        self._not_approved_block_color = not_approved_block_color
 
         # Debounce timer for image settings
         self._debounce_timer = QTimer(self)
@@ -124,6 +128,9 @@ class SettingsViewModel(QObject):
             selected_zone_border_color=copy_color(self.selected_zone_border_color),
             selected_zone_fill_color=copy_color(self.selected_zone_fill_color),
             selected_zone_fill_opacity=copy_int_range(self.selected_zone_fill_opacity),
+
+            not_approved_block_color=copy_color(self.not_approved_block_color),
+
             parent=None
         )
 
@@ -318,4 +325,14 @@ class SettingsViewModel(QObject):
     def selected_zone_fill_opacity(self, value: int_range[0, 255]) -> None:
         if self._selected_zone_fill_opacity != value:
             self._selected_zone_fill_opacity = value
+            self.display_settings_changed.emit()
+
+    @property
+    def not_approved_block_color(self) -> QColor:
+        return self._not_approved_block_color
+
+    @not_approved_block_color.setter
+    def not_approved_block_color(self, value: QColor) -> None:
+        if self._not_approved_block_color != value:
+            self._not_approved_block_color = value
             self.display_settings_changed.emit()

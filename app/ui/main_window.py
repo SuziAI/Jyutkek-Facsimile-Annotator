@@ -287,6 +287,7 @@ class MainWindow(QMainWindow):
         self._content_editor = ZoneContentEditor(
             self._document_vm,
             self._document_service,
+            self._settings_vm,
             parent=self
         )
         content_layout.addWidget(self._content_editor)

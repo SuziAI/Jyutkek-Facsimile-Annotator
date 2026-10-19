@@ -467,7 +467,8 @@ class AddBlockCommand(Command):
         surface = self._document_vm.surfaces[self._surface_index]
         zone = surface.zones[self._zone_index]
 
-        if self._insert_index > len(zone.content.content):  # if insert index is invalid, take last valid index
+        # if insert index is invalid, take last valid index
+        if self._insert_index is None or self._insert_index > len(zone.content.content):
             self._insert_index = len(zone.content.content)
 
     def name(self):
@@ -482,6 +483,8 @@ class AddBlockCommand(Command):
         new_content.insert(self._insert_index, self._block)
         body.content = tuple(new_content)
 
+        self._document_vm.selected_block_index = self._insert_index
+
         self._document_vm.dirty = True
 
     def undo(self) -> None:
@@ -492,6 +495,8 @@ class AddBlockCommand(Command):
         old_content = list(body.content)
         old_content.pop(self._insert_index)
         body.content = tuple(old_content)
+
+        self._document_vm.selected_block_index = self._insert_index - 1
 
         self._document_vm.dirty = True
 

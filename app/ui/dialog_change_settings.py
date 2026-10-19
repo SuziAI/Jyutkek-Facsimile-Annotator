@@ -50,7 +50,7 @@ class DialogChangeSettings(QDialog):
             ]
         },
         {
-            "title": "Display",
+            "title": "Canvas Display",
             "settings": [
                 {
                     "label": "Canvas Background Color",
@@ -104,6 +104,15 @@ class DialogChangeSettings(QDialog):
                     "label": "Selected Zone Fill Opacity",
                     "property": "selected_zone_fill_opacity",
                 },
+            ]
+        },
+        {
+            "title": "Content Display",
+            "settings": [
+                {
+                    "label": "Unapproved Content Cell Color",
+                    "property": "not_approved_block_color",
+                }
             ]
         }
     ]

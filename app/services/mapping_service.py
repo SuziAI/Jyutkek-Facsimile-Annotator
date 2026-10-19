@@ -16,7 +16,7 @@ from app.models.document import (
     DirectionBlock,
     LineBlock,
     TitleBlock,
-    ParagraphBlock,
+    ParagraphBlock, ContentBlock,
 )
 from app.viewmodels.content_cell_viewmodel import (
     ProlongationDotCellViewModel,
@@ -38,7 +38,7 @@ from app.viewmodels.content_block_viewmodel import (
     CellBlockViewModel,
     RoleAnnotBlockViewModel,
     DirectionBlockViewModel,
-    LineBlockViewModel,
+    LineBlockViewModel, ContentBlockViewModel,
 )
 
 # ---------------------------------------------------------------------------
@@ -122,11 +122,21 @@ def viewmodel_to_beat_cell(vm: BeatCellViewModel) -> BeatCell:
     )
 
 
+def _approval_mixin_to_viewmodel(block: ContentBlock, view_model: ContentBlockViewModel):
+    """
+    Set the ContentBlockViewModel parameters according to the ContentBlock model properties.
+    """
+    view_model.approval_state = block.approval_state if block.approval_state is not None else "approved"
+    view_model.approval_note = block.approval_note if block.approval_note is not None else ""
+
+
 def cell_block_to_viewmodel(cell_block: CellBlock, vm: CellBlockViewModel) -> None:
     """
     Set the CellBlockViewModel parameters according to the CellBlock model
     properties.
     """
+    _approval_mixin_to_viewmodel(cell_block, vm)
+
     # Beat
     if cell_block.beat is not None:
         beat_vm = vm.beat
@@ -188,6 +198,8 @@ def viewmodel_to_cell_block(vm: CellBlockViewModel) -> CellBlock:
         gongche=gongche_model,
         syl=syl_model,
         prolongation_dot=prolongation_dot_model,
+        approval_state=vm.approval_state,
+        approval_note=vm.approval_note,
     )
 
 # ---------------------------------------------------------------------------
@@ -199,6 +211,7 @@ def title_block_to_viewmodel(title_block: TitleBlock, vm: TitleBlockViewModel) -
     Set the TitleBlockViewModel parameters according to the TitleBlock model
     properties.
     """
+    _approval_mixin_to_viewmodel(title_block, vm)
     vm.title = title_block.title
 
 
@@ -208,6 +221,8 @@ def viewmodel_to_title_block(vm: TitleBlockViewModel) -> TitleBlock:
     """
     return TitleBlock(
         title=vm.title,
+        approval_state=vm.approval_state,
+        approval_note=vm.approval_note,
     )
 
 
@@ -219,6 +234,7 @@ def paragraph_block_to_viewmodel(
     Set the ParagraphBlockViewModel parameters according to the ParagraphBlock
     model properties.
     """
+    _approval_mixin_to_viewmodel(paragraph_block, vm)
     vm.paragraph = paragraph_block.paragraph
 
 
@@ -228,6 +244,8 @@ def viewmodel_to_paragraph_block(vm: ParagraphBlockViewModel) -> ParagraphBlock:
     """
     return ParagraphBlock(
         paragraph=vm.paragraph,
+        approval_state=vm.approval_state,
+        approval_note=vm.approval_note,
     )
 
 
@@ -239,6 +257,7 @@ def role_annot_block_to_viewmodel(
     Set the RoleAnnotBlockViewModel parameters according to the RoleAnnotBlock
     model properties.
     """
+    _approval_mixin_to_viewmodel(role_annot_block, vm)
     # RoleAnnotBlock.plist is a tuple[RoleAnnot]; VM uses tuple[str]
     vm.plist = tuple(role_annot_block.plist)
     vm.content = role_annot_block.content
@@ -251,6 +270,8 @@ def viewmodel_to_role_annot_block(vm: RoleAnnotBlockViewModel) -> RoleAnnotBlock
     return RoleAnnotBlock(
         plist=tuple(vm.plist),
         content=vm.content,
+        approval_state=vm.approval_state,
+        approval_note=vm.approval_note,
     )
 
 
@@ -262,6 +283,7 @@ def direction_block_to_viewmodel(
     Set the DirectionBlockViewModel parameters according to the DirectionBlock
     model properties.
     """
+    _approval_mixin_to_viewmodel(direction_block, vm)
     # DirectionBlock.plist is tuple[Direction]; VM uses tuple[str]
     vm.plist = tuple(direction_block.plist)
     vm.content = direction_block.content
@@ -274,6 +296,8 @@ def viewmodel_to_direction_block(vm: DirectionBlockViewModel) -> DirectionBlock:
     return DirectionBlock(
         plist=tuple(vm.plist),
         content=vm.content,
+        approval_state=vm.approval_state,
+        approval_note=vm.approval_note,
     )
 
 
@@ -282,6 +306,7 @@ def line_block_to_viewmodel(line_block: LineBlock, vm: LineBlockViewModel) -> No
     Set the LineBlockViewModel parameters according to the LineBlock model
     properties.
     """
+    _approval_mixin_to_viewmodel(line_block, vm)
     vm.content = line_block.content
 
 
@@ -291,6 +316,8 @@ def viewmodel_to_line_block(vm: LineBlockViewModel) -> LineBlock:
     """
     return LineBlock(
         content=vm.content,
+        approval_state=vm.approval_state,
+        approval_note=vm.approval_note,
     )
 
 # ---------------------------------------------------------------------------

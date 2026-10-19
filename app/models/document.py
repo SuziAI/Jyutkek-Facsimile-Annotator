@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
-
+from typing import Literal, Union
 
 """
 Holds whether the document is in TEI or MEI XML format.
@@ -56,6 +55,13 @@ Pitch = Literal[
     "higher_wu"
 ]
 
+"""
+Holds the approval state.
+"""
+Approval = Literal[
+    "approved",
+    "pending"
+]
 
 """
 Holds the syllable continuation type.
@@ -63,8 +69,22 @@ Holds the syllable continuation type.
 Con = Literal["u"]
 
 
-@dataclass(frozen=True)
-class TitleBlock:
+@dataclass(frozen=True, kw_only=True)
+class ApprovalMixin:
+    """
+    Allows for different annotations regarding approval, e.g.,
+    if it has to be checked by another person.
+
+    Properties:
+        approval_state (str): The state of the approval, e.g., "approved" or "pending".
+        approval_note (str): Note or remark accompanying the approval state.
+    """
+    approval_state: Approval = "approved"
+    approval_note: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
+class TitleBlock(ApprovalMixin):
     """
     Holds the piece's title
 
@@ -74,8 +94,8 @@ class TitleBlock:
     title: str
 
 
-@dataclass(frozen=True)
-class ParagraphBlock:
+@dataclass(frozen=True, kw_only=True)
+class ParagraphBlock(ApprovalMixin):
     """
     Holds the piece's introductory information
 
@@ -85,8 +105,8 @@ class ParagraphBlock:
     paragraph: str
 
 
-@dataclass(frozen=True)
-class RoleAnnotBlock:
+@dataclass(frozen=True, kw_only=True)
+class RoleAnnotBlock(ApprovalMixin):
     """
     Holds role annotation data.
 
@@ -99,8 +119,8 @@ class RoleAnnotBlock:
     content: str
 
 
-@dataclass(frozen=True)
-class LineBlock:
+@dataclass(frozen=True, kw_only=True)
+class LineBlock(ApprovalMixin):
     """
     Holds line annotation data.
 
@@ -110,8 +130,8 @@ class LineBlock:
     content: str
 
 
-@dataclass(frozen=True)
-class DirectionBlock:
+@dataclass(frozen=True, kw_only=True)
+class DirectionBlock(ApprovalMixin):
     """
     Holds direction data.
 
@@ -174,8 +194,8 @@ class ProlongationDotCell:
     content: str
 
 
-@dataclass(frozen=True)
-class CellBlock:
+@dataclass(frozen=True, kw_only=True)
+class CellBlock(ApprovalMixin):
     """
     Holds a Jyutkek cell annotation.
 
@@ -190,6 +210,15 @@ class CellBlock:
     syl: SylCell | None
     prolongation_dot: ProlongationDotCell | None
 
+
+ContentBlock = Union[
+    TitleBlock,
+    ParagraphBlock,
+    RoleAnnotBlock,
+    DirectionBlock,
+    LineBlock,
+    CellBlock,
+]
 
 @dataclass(frozen=True)
 class BodyMetadata:
